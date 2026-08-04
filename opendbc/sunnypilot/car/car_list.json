@@ -698,6 +698,16 @@
     ],
     "package": "All"
   },
+  "Genesis G80 (2.5T Advanced Trim, with HDA II) 2024": {
+    "platform": "GENESIS_G80_2ND_GEN_FL",
+    "make": "Genesis",
+    "brand": "hyundai",
+    "model": "G80 (2.5T Advanced Trim, with HDA II)",
+    "year": [
+      "2024"
+    ],
+    "package": "Highway Driving Assist II"
+  },
   "Genesis G80 2017": {
     "platform": "HYUNDAI_GENESIS",
     "make": "Genesis",
@@ -718,16 +728,6 @@
       "2019"
     ],
     "package": "All"
-  },
-  "Genesis G80 (2.5T Advanced Trim, with HDA II) 2024": {
-    "platform": "GENESIS_G80_2ND_GEN_FL",
-    "make": "Genesis",
-    "brand": "hyundai",
-    "model": "G80 (2.5T Advanced Trim, with HDA II)",
-    "year": [
-      "2024"
-    ],
-    "package": "Highway Driving Assist II"
   },
   "Genesis G90 2017-20": {
     "platform": "GENESIS_G90",
@@ -971,16 +971,6 @@
     ],
     "package": "All"
   },
-  "Honda Civic Hatchback Hybrid 2025": {
-    "platform": "HONDA_CIVIC_2022",
-    "make": "Honda",
-    "brand": "honda",
-    "model": "Civic Hatchback Hybrid",
-    "year": [
-      "2025"
-    ],
-    "package": "All"
-  },
   "Honda Civic Hatchback Hybrid (Europe only) 2023": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
@@ -988,6 +978,16 @@
     "model": "Civic Hatchback Hybrid (Europe only)",
     "year": [
       "2023"
+    ],
+    "package": "All"
+  },
+  "Honda Civic Hatchback Hybrid 2025": {
+    "platform": "HONDA_CIVIC_2022",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Civic Hatchback Hybrid",
+    "year": [
+      "2025"
     ],
     "package": "All"
   },
@@ -1498,6 +1498,16 @@
     ],
     "package": "Smart Cruise Control (SCC)"
   },
+  "Hyundai Kona Electric (with HDA II, Korea only) 2023": {
+    "platform": "HYUNDAI_KONA_EV_2ND_GEN",
+    "make": "Hyundai",
+    "brand": "hyundai",
+    "model": "Kona Electric (with HDA II, Korea only)",
+    "year": [
+      "2023"
+    ],
+    "package": "Smart Cruise Control (SCC)"
+  },
   "Hyundai Kona Electric 2018-21": {
     "platform": "HYUNDAI_KONA_EV",
     "make": "Hyundai",
@@ -1518,16 +1528,6 @@
     "model": "Kona Electric",
     "year": [
       "2022",
-      "2023"
-    ],
-    "package": "Smart Cruise Control (SCC)"
-  },
-  "Hyundai Kona Electric (with HDA II, Korea only) 2023": {
-    "platform": "HYUNDAI_KONA_EV_2ND_GEN",
-    "make": "Hyundai",
-    "brand": "hyundai",
-    "model": "Kona Electric (with HDA II, Korea only)",
-    "year": [
       "2023"
     ],
     "package": "Smart Cruise Control (SCC)"
@@ -1786,6 +1786,16 @@
     ],
     "package": "Adaptive Cruise Control (ACC)"
   },
+  "Kia Carnival (China only) 2023": {
+    "platform": "KIA_CARNIVAL_4TH_GEN",
+    "make": "Kia",
+    "brand": "hyundai",
+    "model": "Carnival (China only)",
+    "year": [
+      "2023"
+    ],
+    "package": "Smart Cruise Control (SCC)"
+  },
   "Kia Carnival 2022-24": {
     "platform": "KIA_CARNIVAL_4TH_GEN",
     "make": "Kia",
@@ -1795,16 +1805,6 @@
       "2022",
       "2023",
       "2024"
-    ],
-    "package": "Smart Cruise Control (SCC)"
-  },
-  "Kia Carnival (China only) 2023": {
-    "platform": "KIA_CARNIVAL_4TH_GEN",
-    "make": "Kia",
-    "brand": "hyundai",
-    "model": "Carnival (China only)",
-    "year": [
-      "2023"
     ],
     "package": "Smart Cruise Control (SCC)"
   },
@@ -1924,6 +1924,28 @@
     ],
     "package": "Highway Driving Assist II"
   },
+  "Kia Niro EV (with HDA II) 2025": {
+    "platform": "KIA_NIRO_EV_2ND_GEN",
+    "make": "Kia",
+    "brand": "hyundai",
+    "model": "Niro EV (with HDA II)",
+    "year": [
+      "2025"
+    ],
+    "package": "Highway Driving Assist II"
+  },
+  "Kia Niro EV (without HDA II) 2023-25": {
+    "platform": "KIA_NIRO_EV_2ND_GEN",
+    "make": "Kia",
+    "brand": "hyundai",
+    "model": "Niro EV (without HDA II)",
+    "year": [
+      "2023",
+      "2024",
+      "2025"
+    ],
+    "package": "All"
+  },
   "Kia Niro EV 2019": {
     "platform": "KIA_NIRO_EV",
     "make": "Kia",
@@ -1961,28 +1983,6 @@
     "model": "Niro EV",
     "year": [
       "2022"
-    ],
-    "package": "All"
-  },
-  "Kia Niro EV (with HDA II) 2025": {
-    "platform": "KIA_NIRO_EV_2ND_GEN",
-    "make": "Kia",
-    "brand": "hyundai",
-    "model": "Niro EV (with HDA II)",
-    "year": [
-      "2025"
-    ],
-    "package": "Highway Driving Assist II"
-  },
-  "Kia Niro EV (without HDA II) 2023-25": {
-    "platform": "KIA_NIRO_EV_2ND_GEN",
-    "make": "Kia",
-    "brand": "hyundai",
-    "model": "Niro EV (without HDA II)",
-    "year": [
-      "2023",
-      "2024",
-      "2025"
     ],
     "package": "All"
   },
@@ -2721,6 +2721,16 @@
     ],
     "package": "All"
   },
+  "Subaru Ascent 2023": {
+    "platform": "SUBARU_ASCENT_2023",
+    "make": "Subaru",
+    "brand": "subaru",
+    "model": "Ascent",
+    "year": [
+      "2023"
+    ],
+    "package": "All"
+  },
   "Subaru Crosstrek 2018-19": {
     "platform": "SUBARU_IMPREZA",
     "make": "Subaru",
@@ -2765,6 +2775,18 @@
       "2019",
       "2020",
       "2021"
+    ],
+    "package": "All"
+  },
+  "Subaru Forester 2022-24": {
+    "platform": "SUBARU_FORESTER_2022",
+    "make": "Subaru",
+    "brand": "subaru",
+    "model": "Forester",
+    "year": [
+      "2022",
+      "2023",
+      "2024"
     ],
     "package": "All"
   },
@@ -2852,6 +2874,16 @@
     ],
     "package": "All"
   },
+  "Subaru Outback 2023": {
+    "platform": "SUBARU_OUTBACK_2023",
+    "make": "Subaru",
+    "brand": "subaru",
+    "model": "Outback",
+    "year": [
+      "2023"
+    ],
+    "package": "All"
+  },
   "Subaru XV 2018-19": {
     "platform": "SUBARU_IMPREZA",
     "make": "Subaru",
@@ -2873,125 +2905,6 @@
       "2021"
     ],
     "package": "EyeSight Driver Assistance"
-  },
-  "Škoda Fabia 2022-23": {
-    "platform": "SKODA_FABIA_MK4",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Fabia",
-    "year": [
-      "2022",
-      "2023"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Kamiq 2021-23": {
-    "platform": "SKODA_KAMIQ_MK1",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Kamiq",
-    "year": [
-      "2021",
-      "2022",
-      "2023"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Karoq 2019-23": {
-    "platform": "SKODA_KAROQ_MK1",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Karoq",
-    "year": [
-      "2019",
-      "2020",
-      "2021",
-      "2022",
-      "2023"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Kodiaq 2017-23": {
-    "platform": "SKODA_KODIAQ_MK1",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Kodiaq",
-    "year": [
-      "2017",
-      "2018",
-      "2019",
-      "2020",
-      "2021",
-      "2022",
-      "2023"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Octavia 2015-19": {
-    "platform": "SKODA_OCTAVIA_MK3",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Octavia",
-    "year": [
-      "2015",
-      "2016",
-      "2017",
-      "2018",
-      "2019"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Octavia RS 2016": {
-    "platform": "SKODA_OCTAVIA_MK3",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Octavia RS",
-    "year": [
-      "2016"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Octavia Scout 2017-19": {
-    "platform": "SKODA_OCTAVIA_MK3",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Octavia Scout",
-    "year": [
-      "2017",
-      "2018",
-      "2019"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Scala 2020-23": {
-    "platform": "SKODA_KAMIQ_MK1",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Scala",
-    "year": [
-      "2020",
-      "2021",
-      "2022",
-      "2023"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
-  },
-  "Škoda Superb 2015-22": {
-    "platform": "SKODA_SUPERB_MK3",
-    "make": "Škoda",
-    "brand": "volkswagen",
-    "model": "Superb",
-    "year": [
-      "2015",
-      "2016",
-      "2017",
-      "2018",
-      "2019",
-      "2020",
-      "2021",
-      "2022"
-    ],
-    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
   "Tesla Model 3 (with HW3) 2019-23": {
     "platform": "TESLA_MODEL_3",
@@ -3286,18 +3199,6 @@
     ],
     "package": "All"
   },
-  "Toyota Corolla Hybrid 2020-22": {
-    "platform": "TOYOTA_COROLLA_TSS2",
-    "make": "Toyota",
-    "brand": "toyota",
-    "model": "Corolla Hybrid",
-    "year": [
-      "2020",
-      "2021",
-      "2022"
-    ],
-    "package": "All"
-  },
   "Toyota Corolla Hybrid (South America only) 2020-23": {
     "platform": "TOYOTA_COROLLA_TSS2",
     "make": "Toyota",
@@ -3308,6 +3209,18 @@
       "2021",
       "2022",
       "2023"
+    ],
+    "package": "All"
+  },
+  "Toyota Corolla Hybrid 2020-22": {
+    "platform": "TOYOTA_COROLLA_TSS2",
+    "make": "Toyota",
+    "brand": "toyota",
+    "model": "Corolla Hybrid",
+    "year": [
+      "2020",
+      "2021",
+      "2022"
     ],
     "package": "All"
   },
@@ -4114,6 +4027,125 @@
       "2021",
       "2022",
       "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Fabia 2022-23": {
+    "platform": "SKODA_FABIA_MK4",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Fabia",
+    "year": [
+      "2022",
+      "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Kamiq 2021-23": {
+    "platform": "SKODA_KAMIQ_MK1",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Kamiq",
+    "year": [
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Karoq 2019-23": {
+    "platform": "SKODA_KAROQ_MK1",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Karoq",
+    "year": [
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Kodiaq 2017-23": {
+    "platform": "SKODA_KODIAQ_MK1",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Kodiaq",
+    "year": [
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Octavia 2015-19": {
+    "platform": "SKODA_OCTAVIA_MK3",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Octavia",
+    "year": [
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Octavia RS 2016": {
+    "platform": "SKODA_OCTAVIA_MK3",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Octavia RS",
+    "year": [
+      "2016"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Octavia Scout 2017-19": {
+    "platform": "SKODA_OCTAVIA_MK3",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Octavia Scout",
+    "year": [
+      "2017",
+      "2018",
+      "2019"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Scala 2020-23": {
+    "platform": "SKODA_KAMIQ_MK1",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Scala",
+    "year": [
+      "2020",
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Škoda Superb 2015-22": {
+    "platform": "SKODA_SUPERB_MK3",
+    "make": "Škoda",
+    "brand": "volkswagen",
+    "model": "Superb",
+    "year": [
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022"
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   }
