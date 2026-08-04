@@ -18,7 +18,12 @@ class CarInterface(CarInterfaceBase):
     # - replacement for ES_Distance so we can cancel the cruise control
     # - to find the Cruise_Activated bit from the car
     # - proper panda safety setup (use the correct cruise_activated bit, throttle from Throttle_Hybrid, etc)
-    ret.dashcamOnly = bool(ret.flags & (SubaruFlags.PREGLOBAL | SubaruFlags.LKAS_ANGLE | SubaruFlags.HYBRID))
+    # Experimental: unlock LKAS_ANGLE lateral (Outback 2023 etc.) on this fork.
+    # Keep Pre-Global / Hybrid dashcam policy from stock sunnypilot/openpilot.
+    ret.dashcamOnly = bool(ret.flags & (SubaruFlags.PREGLOBAL | SubaruFlags.HYBRID))
+    # Gen1 angle (Forester 2022) less validated — keep dashcam until tested
+    if candidate == CAR.SUBARU_FORESTER_2022:
+      ret.dashcamOnly = True
     ret.autoResumeSng = False
 
     # Detect infotainment message sent from the camera
@@ -33,6 +38,8 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.subaru)]
       if ret.flags & SubaruFlags.GLOBAL_GEN2:
         ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.GEN2.value
+      if ret.flags & SubaruFlags.LKAS_ANGLE:
+        ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.LKAS_ANGLE.value
 
     ret.steerLimitTimer = 0.4
     ret.steerActuatorDelay = 0.1
@@ -101,7 +108,11 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
                      car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParamsSP:
-    stock_cp.dashcamOnly = bool(stock_cp.flags & (SubaruFlags.LKAS_ANGLE | SubaruFlags.HYBRID))
+    # Unlock Pre-Global (sunnypilot stock). LKAS_ANGLE unlocked in _get_params for this experimental fork.
+    # Keep Hybrid dashcam-only.
+    stock_cp.dashcamOnly = bool(stock_cp.flags & SubaruFlags.HYBRID)
+    if candidate == CAR.SUBARU_FORESTER_2022:
+      stock_cp.dashcamOnly = True
 
     return ret
 

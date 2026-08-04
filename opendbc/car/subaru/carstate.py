@@ -64,11 +64,17 @@ class CarState(CarStateBase, MadsCarState):
     can_gear = int(cp_transmission.vl["Transmission"]["Gear"])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
 
-    ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
+    if not (self.CP.flags & SubaruFlags.LKAS_ANGLE):
+      ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
+      steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
+    else:
+      # Prefer Steering_2 for angle LKAS platforms (Outback 2023 etc.); Steering_Torque angle may be 0 on newer cars
+      ret.steeringAngleDeg = cp.vl["Steering_2"]["Steering_Angle"]
+      steer_counter = cp.vl["Steering_2"]["COUNTER"]
 
     if not (self.CP.flags & SubaruFlags.PREGLOBAL):
       # ideally we get this from the car, but unclear if it exists. diagnostic software doesn't even have it
-      ret.steeringRateDeg = self.angle_rate_calulator.update(ret.steeringAngleDeg, cp.vl["Steering_Torque"]["COUNTER"])
+      ret.steeringRateDeg = self.angle_rate_calulator.update(ret.steeringAngleDeg, steer_counter)
 
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
@@ -77,8 +83,10 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
 
     cp_cruise = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
-    if self.CP.flags & SubaruFlags.HYBRID:
-      ret.cruiseState.enabled = cp_cam.vl["ES_DashStatus"]['Cruise_Activated'] != 0
+    cp_es_brake = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp_cam
+    if self.CP.flags & (SubaruFlags.HYBRID | SubaruFlags.LKAS_ANGLE):
+      # Angle / hybrid: use ES_Brake Cruise_Activated (CruiseControl / dash bits unreliable)
+      ret.cruiseState.enabled = cp_es_brake.vl["ES_Brake"]['Cruise_Activated'] != 0
       ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
     else:
       ret.cruiseState.enabled = cp_cruise.vl["CruiseControl"]["Cruise_Activated"] != 0
@@ -107,7 +115,6 @@ class CarState(CarStateBase, MadsCarState):
                      (cp_cam.vl["ES_LKAS_State"]["LKAS_Alert"] == 2)
 
       self.es_lkas_state_msg = copy.copy(cp_cam.vl["ES_LKAS_State"])
-      cp_es_brake = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp_cam
       self.es_brake_msg = copy.copy(cp_es_brake.vl["ES_Brake"])
       cp_es_status = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp_cam
 
