@@ -26,11 +26,8 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
 
   def handle_angle_lateral(self, CC, CS):
-    # Re-anchor the first active command to the live steering angle so the
-    # controller and panda safety start from the same reference.
-    if CC.latActive and not self.lat_active_prev:
-      self.apply_angle_last = CS.out.steeringAngleDeg
-
+    # Align openpilot_justin/outback-23: rate-limit only, hold measured angle when inactive.
+    # (No latActive re-anchor — justin path.)
     apply_steer = apply_std_steer_angle_limits(
       CC.actuators.steeringAngleDeg,
       self.apply_angle_last,

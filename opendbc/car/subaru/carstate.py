@@ -34,14 +34,20 @@ class CarState(CarStateBase, MadsCarState):
       ret.brakePressed = cp_brakes.vl["Brake_Status"]["Brake"] == 1
 
     cp_es_distance = cp_alt if self.CP.flags & (SubaruFlags.GLOBAL_GEN2 | SubaruFlags.HYBRID) else cp_cam
+    cp_es_status = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp_cam
+    cp_es_brake = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp_cam
+
     if not (self.CP.flags & SubaruFlags.HYBRID):
       eyesight_fault = bool(cp_es_distance.vl["ES_Distance"]["Cruise_Fault"])
 
-      # if openpilot is controlling long, an eyesight fault is a non-critical fault. otherwise it's an ACC fault
+      # Match openpilot_justin/outback-23 for LKAS_ANGLE: do NOT map EyeSight Cruise_Fault
+      # into accFaulted (that path causes "Cruise Fault: Restart the car" disengage).
+      # Still surface the bit when OP is controlling long (non-critical).
       if self.CP.openpilotLongitudinalControl:
         ret.carFaultedNonCritical = eyesight_fault
-      else:
+      elif not (self.CP.flags & SubaruFlags.LKAS_ANGLE):
         ret.accFaulted = eyesight_fault
+      # else: LKAS_ANGLE stock-long — ignore Cruise_Fault for OP events (justin behavior)
 
     cp_wheels = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
     self.parse_wheel_speeds(ret,
@@ -64,13 +70,9 @@ class CarState(CarStateBase, MadsCarState):
     can_gear = int(cp_transmission.vl["Transmission"]["Gear"])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
 
-    if not (self.CP.flags & SubaruFlags.LKAS_ANGLE):
-      ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
-      steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
-    else:
-      # Prefer Steering_2 for angle LKAS platforms (Outback 2023 etc.); Steering_Torque angle may be 0 on newer cars
-      ret.steeringAngleDeg = cp.vl["Steering_2"]["Steering_Angle"]
-      steer_counter = cp.vl["Steering_2"]["COUNTER"]
+    # Align justin/outback-23: use Steering_Torque angle for all cars (including LKAS_ANGLE)
+    ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
+    steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
 
     if not (self.CP.flags & SubaruFlags.PREGLOBAL):
       # ideally we get this from the car, but unclear if it exists. diagnostic software doesn't even have it
@@ -83,10 +85,12 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
 
     cp_cruise = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
-    cp_es_brake = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp_cam
-    if self.CP.flags & (SubaruFlags.HYBRID | SubaruFlags.LKAS_ANGLE):
-      # Angle / hybrid: use ES_Brake Cruise_Activated (CruiseControl / dash bits unreliable)
-      ret.cruiseState.enabled = cp_es_brake.vl["ES_Brake"]['Cruise_Activated'] != 0
+    if self.CP.flags & SubaruFlags.HYBRID:
+      ret.cruiseState.enabled = cp_cam.vl["ES_DashStatus"]['Cruise_Activated'] != 0
+      ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
+    elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
+      # justin/outback-23 ES_STATUS path: Cruise_Activated from ES_Status (not ES_Brake)
+      ret.cruiseState.enabled = cp_es_status.vl["ES_Status"]['Cruise_Activated'] != 0
       ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
     else:
       ret.cruiseState.enabled = cp_cruise.vl["CruiseControl"]["Cruise_Activated"] != 0
@@ -116,7 +120,6 @@ class CarState(CarStateBase, MadsCarState):
 
       self.es_lkas_state_msg = copy.copy(cp_cam.vl["ES_LKAS_State"])
       self.es_brake_msg = copy.copy(cp_es_brake.vl["ES_Brake"])
-      cp_es_status = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp_cam
 
       # TODO: Hybrid cars don't have ES_Distance, need a replacement
       if not (self.CP.flags & SubaruFlags.HYBRID):

@@ -19,11 +19,12 @@ class CarControllerParams:
     self.STEER_DRIVER_MULTIPLIER = 50  # weight driver torque heavily
     self.STEER_DRIVER_FACTOR = 1       # from dbc
 
-    # LKAS_ANGLE (Outback 2023 etc.) — aligned with JacobW / safety angle limits
+    # LKAS_ANGLE: match openpilot_justin/outback-23 rate (1 deg/step all speeds).
+    # Tighter JacobW limits can be restored after Cruise/LKAS fault is sorted.
     self.ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
       545,
-      ([0., 5., 35.], [5., .8, .15, ]),
-      ([0., 5., 35.], [5., .8, .15, ]),
+      ([0.], [1.]),
+      ([0.], [1.]),
     )
 
     if CP.flags & SubaruFlags.GLOBAL_GEN2:
