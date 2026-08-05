@@ -70,9 +70,9 @@ class CarState(CarStateBase, MadsCarState):
     can_gear = int(cp_transmission.vl["Transmission"]["Gear"])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
 
-    # LKAS_ANGLE: must use Steering_2 (0.01 deg) — same source/scale as panda safety
-    # angle_meas and ES_LKAS_ANGLE. Using Steering_Torque here made inactive 0x124 fail
-    # safety checks → relay blocks stock + OP TX dropped → EyeSight/EPS LKAS fault when C3 on.
+    # LKAS_ANGLE: Steering_2 must match panda safety angle_meas (0.01 deg scale).
+    # Using Steering_Torque (different scale) for inactive 0x124 makes panda drop TX
+    # while relay blocks stock → permanent LKAS Fault until car restart.
     if self.CP.flags & SubaruFlags.LKAS_ANGLE:
       ret.steeringAngleDeg = cp.vl["Steering_2"]["Steering_Angle"]
       steer_counter = cp.vl["Steering_2"]["COUNTER"]
@@ -87,12 +87,12 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
 
-    # Angle LKAS: align with carcontroller hand-control thresholds. Too low (25) made
-    # controlsd lat pause on normal curve self-align torque → poor cornering.
+    # LKAS_ANGLE: match carcontroller hand-priority (~45). Stock 80 is too late —
+    # light hand input keeps latActive and OP fights EPS → EyeSight/LKAS Fault.
     if self.CP.flags & SubaruFlags.PREGLOBAL:
       steer_threshold = 75
     elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      steer_threshold = 50
+      steer_threshold = 45
     else:
       steer_threshold = 80
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
@@ -102,7 +102,7 @@ class CarState(CarStateBase, MadsCarState):
       ret.cruiseState.enabled = cp_cam.vl["ES_DashStatus"]['Cruise_Activated'] != 0
       ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
     elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      # Match panda safety (ES_Brake bit) + JacobW so controls_allowed tracks stock ACC
+      # Match panda safety pcm_cruise_check (ES_Brake bit) + JacobW
       ret.cruiseState.enabled = cp_es_brake.vl["ES_Brake"]['Cruise_Activated'] != 0
       ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
     else:

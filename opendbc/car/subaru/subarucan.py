@@ -13,9 +13,8 @@ def create_steering_control(packer, apply_torque, steer_req):
   return packer.make_can_msg("ES_LKAS", 0, values)
 
 
-def create_steering_control_angle(packer, apply_angle, steer_req, frame=0):
+def create_steering_control_angle(packer, apply_angle, steer_req):
   values = {
-    "COUNTER": frame % 0x10,
     "LKAS_Output": apply_angle,
     "LKAS_Request": 1 if steer_req else 0,
     "SET_3": 3,
@@ -123,9 +122,9 @@ def create_es_lkas_state(packer, frame, es_lkas_state_msg, enabled, visual_alert
   if enabled:
     values["LKAS_ACTIVE"] = 1  # Show LKAS lane lines
     values["LKAS_Dash_State"] = 2  # Green enabled indicator
-  # When disabled: keep stock LKAS_ACTIVE / LKAS_Dash_State from the camera copy.
-  # Forcing Dash_State=0 while rewriting 0x322 (relay blocks stock) has caused
-  # EyeSight unhappiness on angle / Harness D cars at boot.
+  # When disabled: keep stock LKAS_ACTIVE / LKAS_Dash_State from camera copy.
+  # Forcing Dash_State=0 while Harness D relay blocks stock 0x322 has caused
+  # EyeSight LKAS Fault at key-on before the car even moves.
 
   values["LKAS_Left_Line_Visible"] = int(left_line)
   values["LKAS_Right_Line_Visible"] = int(right_line)
