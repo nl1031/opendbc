@@ -70,9 +70,15 @@ class CarState(CarStateBase, MadsCarState):
     can_gear = int(cp_transmission.vl["Transmission"]["Gear"])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
 
-    # Align justin/outback-23: use Steering_Torque angle for all cars (including LKAS_ANGLE)
-    ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
-    steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
+    # LKAS_ANGLE: must use Steering_2 (0.01 deg) — same source/scale as panda safety
+    # angle_meas and ES_LKAS_ANGLE. Using Steering_Torque here made inactive 0x124 fail
+    # safety checks → relay blocks stock + OP TX dropped → EyeSight/EPS LKAS fault when C3 on.
+    if self.CP.flags & SubaruFlags.LKAS_ANGLE:
+      ret.steeringAngleDeg = cp.vl["Steering_2"]["Steering_Angle"]
+      steer_counter = cp.vl["Steering_2"]["COUNTER"]
+    else:
+      ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
+      steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
 
     if not (self.CP.flags & SubaruFlags.PREGLOBAL):
       # ideally we get this from the car, but unclear if it exists. diagnostic software doesn't even have it
@@ -81,7 +87,14 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
 
-    steer_threshold = 75 if self.CP.flags & SubaruFlags.PREGLOBAL else 80
+    # Angle LKAS: align with carcontroller hand-control thresholds. Too low (25) made
+    # controlsd lat pause on normal curve self-align torque → poor cornering.
+    if self.CP.flags & SubaruFlags.PREGLOBAL:
+      steer_threshold = 75
+    elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
+      steer_threshold = 50
+    else:
+      steer_threshold = 80
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
 
     cp_cruise = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
@@ -89,8 +102,8 @@ class CarState(CarStateBase, MadsCarState):
       ret.cruiseState.enabled = cp_cam.vl["ES_DashStatus"]['Cruise_Activated'] != 0
       ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
     elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      # justin/outback-23 ES_STATUS path: Cruise_Activated from ES_Status (not ES_Brake)
-      ret.cruiseState.enabled = cp_es_status.vl["ES_Status"]['Cruise_Activated'] != 0
+      # Match panda safety (ES_Brake bit) + JacobW so controls_allowed tracks stock ACC
+      ret.cruiseState.enabled = cp_es_brake.vl["ES_Brake"]['Cruise_Activated'] != 0
       ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
     else:
       ret.cruiseState.enabled = cp_cruise.vl["CruiseControl"]["Cruise_Activated"] != 0

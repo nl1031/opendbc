@@ -46,6 +46,9 @@ class CarInterface(CarInterfaceBase):
 
     if ret.flags & SubaruFlags.LKAS_ANGLE:
       ret.steerControlType = structs.CarParams.SteerControlType.angle
+      # Angle rate caps + EPS lag: stock 0.4s saturates too easily on bends →
+      # "Take Control / Turn Exceeds Steering Limit". Give more time before alert.
+      ret.steerLimitTimer = 1.0
     else:
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
@@ -78,7 +81,11 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0., 14., 23.], [0., 14., 23.]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.01, 0.065, 0.2], [0.001, 0.015, 0.025]]
 
-    elif candidate in (CAR.SUBARU_OUTBACK, CAR.SUBARU_LEGACY, CAR.SUBARU_OUTBACK_2023):
+    elif candidate == CAR.SUBARU_OUTBACK_2023:
+      # Angle LKAS: a bit more delay helps model look-ahead on curves (was 0.1 with
+      # torque-era Outback). Tune further from routes if still late into bends.
+      ret.steerActuatorDelay = 0.2
+    elif candidate in (CAR.SUBARU_OUTBACK, CAR.SUBARU_LEGACY):
       ret.steerActuatorDelay = 0.1
 
     elif candidate in (CAR.SUBARU_FORESTER_PREGLOBAL, CAR.SUBARU_OUTBACK_PREGLOBAL_2018):

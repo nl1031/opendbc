@@ -12,12 +12,23 @@ MAX_STEER_RATE = 25  # deg/s
 MAX_STEER_RATE_FRAMES = 7  # tx control frames needed before torque can be cut
 
 
+# Angle LKAS hand-priority (must not false-trigger on curve self-align torque).
+# Units: Steering_Torque sensor. STEER_STEP=2 → handle_angle_lateral ~50 Hz.
+# Road load on bends often sits ~15–35; intentional hand input is higher.
+ANGLE_DRIVER_TORQUE_ON = 50   # enter hand-control (was 25 — too low, curves looked like hands)
+ANGLE_DRIVER_TORQUE_OFF = 22  # exit hand-control when released
+ANGLE_ERR_YIELD_DEG = 8.0     # only soft-yield on large cmd/meas fight (was 3° — mid-curve lag)
+ANGLE_OVERRIDE_RELEASE_FRAMES = 8  # ~0.16s before OP resumes (was 25/~0.5s — felt laggy)
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP, CP_SP):
     super().__init__(dbc_names, CP, CP_SP)
     self.apply_torque_last = 0
     self.apply_angle_last = 0
     self.lat_active_prev = False
+    self.driver_steer_override = False
+    self.override_release_counter = 0
 
     self.cruise_button_prev = 0
     self.steer_rate_counter = 0
@@ -26,23 +37,59 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
 
   def handle_angle_lateral(self, CC, CS):
-    # Align openpilot_justin/outback-23: rate-limit only, hold measured angle when inactive.
-    # (No latActive re-anchor — justin path.)
+    # Re-anchor on engage so OP and panda safety start from the same measured angle
+    # (Steering_2). Critical: when inactive, command must stay near angle_meas or
+    # panda drops ES_LKAS_ANGLE while relay still blocks stock → EyeSight/EPS fault.
+    if CC.latActive and not self.lat_active_prev and not self.driver_steer_override:
+      self.apply_angle_last = CS.out.steeringAngleDeg
+
+    # --- hand control while OP engaged ---
+    # Goal: turn the wheel → car follows hand, LKAS_Request=0, no EPS fault.
+    # Applied here same frame as TX (not only controlsd steerOverride lag).
+    tq = abs(float(CS.out.steeringTorque))
+    meas = float(CS.out.steeringAngleDeg)
+
+    if tq >= ANGLE_DRIVER_TORQUE_ON or CS.out.steeringPressed:
+      self.driver_steer_override = True
+      self.override_release_counter = 0
+    elif self.driver_steer_override:
+      if tq <= ANGLE_DRIVER_TORQUE_OFF and not CS.out.steeringPressed:
+        self.override_release_counter += 1
+        if self.override_release_counter >= ANGLE_OVERRIDE_RELEASE_FRAMES:
+          self.driver_steer_override = False
+          self.override_release_counter = 0
+          self.apply_angle_last = meas  # re-anchor before OP resumes
+      else:
+        self.override_release_counter = 0
+
+    lat_active_cmd = bool(CC.latActive) and not self.driver_steer_override
     apply_steer = apply_std_steer_angle_limits(
       CC.actuators.steeringAngleDeg,
       self.apply_angle_last,
       CS.out.vEgoRaw,
-      CS.out.steeringAngleDeg,
-      CC.latActive,
+      meas,
+      lat_active_cmd,
       self.p.ANGLE_LIMITS,
     )
 
-    if not CC.latActive:
-      apply_steer = CS.out.steeringAngleDeg
+    # Soft-yield only on clear fight: large cmd–meas gap *and* intentional hand torque.
+    # Using TORQUE_OFF here made mid-curve EPS/road torque drop LKAS_Request → understeer to curb.
+    if lat_active_cmd and abs(apply_steer - meas) > ANGLE_ERR_YIELD_DEG and tq >= ANGLE_DRIVER_TORQUE_ON:
+      self.driver_steer_override = True
+      self.override_release_counter = 0
+      lat_active_cmd = False
+
+    if not lat_active_cmd:
+      # Follow hand exactly with request cleared — safe inactive path for panda/EPS
+      apply_steer = meas
 
     self.apply_angle_last = apply_steer
-    self.lat_active_prev = CC.latActive
-    return subarucan.create_steering_control_angle(self.packer, apply_steer, CC.latActive)
+    # lat_active_prev tracks CC.latActive engage edge (not per-frame cmd) so re-anchor
+    # only on OP lateral engage, not every hand-control exit.
+    self.lat_active_prev = bool(CC.latActive)
+    return subarucan.create_steering_control_angle(
+      self.packer, apply_steer, lat_active_cmd, self.frame // self.p.STEER_STEP
+    )
 
   def handle_torque_lateral(self, CC, CS):
     apply_torque = int(round(CC.actuators.torque * self.p.STEER_MAX))
