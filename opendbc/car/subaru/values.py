@@ -19,11 +19,14 @@ class CarControllerParams:
     self.STEER_DRIVER_MULTIPLIER = 50  # weight driver torque heavily
     self.STEER_DRIVER_FACTOR = 1       # from dbc
 
-    # JacobW LKAS_ANGLE rate limits (must match safety/modes/subaru.h)
+    # LKAS_ANGLE: 1 deg/step all speeds (justin/outback-23 style).
+    # JacobW 5/0.8/0.15 causes panda to drop ES_LKAS_ANGLE at highway when OP
+    # commands faster than 0.15°/TX while harness blocks stock → EPS Steer_Error_1
+    # ("LKAS Fault: Restart the Car"). Must match safety/modes/subaru.h.
     self.ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
       545,
-      ([0., 5., 35.], [5., .8, .15,]),
-      ([0., 5., 35.], [5., .8, .15,]),
+      ([0.], [1.]),
+      ([0.], [1.]),
     )
 
     if CP.flags & SubaruFlags.GLOBAL_GEN2:

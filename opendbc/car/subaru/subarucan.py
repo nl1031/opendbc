@@ -122,8 +122,9 @@ def create_es_lkas_state(packer, frame, es_lkas_state_msg, enabled, visual_alert
   if enabled:
     values["LKAS_ACTIVE"] = 1  # Show LKAS lane lines
     values["LKAS_Dash_State"] = 2  # Green enabled indicator
-  else:
-    values["LKAS_Dash_State"] = 0  # LKAS Not enabled (JacobW)
+  # When disabled: keep stock LKAS_ACTIVE / LKAS_Dash_State from camera copy.
+  # Forcing Dash_State=0 while Harness D relay blocks stock 0x322 has caused
+  # EyeSight LKAS Fault at key-on / disengage edges.
 
   values["LKAS_Left_Line_Visible"] = int(left_line)
   values["LKAS_Right_Line_Visible"] = int(right_line)

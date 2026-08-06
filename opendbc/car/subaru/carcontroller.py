@@ -11,6 +11,13 @@ from opendbc.car.subaru.values import DBC, GLOBAL_ES_ADDR, CanBus, CarController
 MAX_STEER_RATE = 25  # deg/s
 MAX_STEER_RATE_FRAMES = 7  # tx control frames needed before torque can be cut
 
+# Angle LKAS: same-frame hand/brake priority so EPS never fights the driver.
+# STEER_STEP=2 → this path runs ~50 Hz. Thresholds aligned with carstate.steeringPressed.
+# Keep ON high enough that road/self-align torque on gentle curves does not false-yield.
+ANGLE_DRIVER_TORQUE_ON = 45
+ANGLE_DRIVER_TORQUE_OFF = 20
+ANGLE_OVERRIDE_RELEASE_FRAMES = 8  # ~0.16 s before OP resumes after hands release
+
 
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP, CP_SP):
@@ -18,6 +25,8 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.apply_angle_last = 0
     self.lat_active_prev = False
+    self.driver_steer_override = False
+    self.override_release_counter = 0
 
     self.cruise_button_prev = 0
     self.steer_rate_counter = 0
@@ -26,27 +35,46 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
 
   def handle_angle_lateral(self, CC, CS):
-    # Re-anchor the first active command to the live steering angle so the
-    # controller and panda safety start from the same reference.
-    # (JacobW openpilot_jacobwaller)
-    if CC.latActive and not self.lat_active_prev:
-      self.apply_angle_last = CS.out.steeringAngleDeg
+    meas = float(CS.out.steeringAngleDeg)
+    tq = abs(float(CS.out.steeringTorque))
 
+    # JacobW: re-anchor first active command to live steering so controller and
+    # panda safety share the same reference.
+    if CC.latActive and not self.lat_active_prev and not self.driver_steer_override:
+      self.apply_angle_last = meas
+
+    # Hand / brake priority while OP engaged: clear LKAS_Request same frame as
+    # measured angle so EPS is not fought (prevents permanent Steer_Error_1).
+    if CS.out.brakePressed or tq >= ANGLE_DRIVER_TORQUE_ON or CS.out.steeringPressed:
+      self.driver_steer_override = True
+      self.override_release_counter = 0
+    elif self.driver_steer_override:
+      if (not CS.out.brakePressed) and tq <= ANGLE_DRIVER_TORQUE_OFF and not CS.out.steeringPressed:
+        self.override_release_counter += 1
+        if self.override_release_counter >= ANGLE_OVERRIDE_RELEASE_FRAMES:
+          self.driver_steer_override = False
+          self.override_release_counter = 0
+          self.apply_angle_last = meas  # re-anchor before OP resumes
+      else:
+        self.override_release_counter = 0
+
+    lat_active_cmd = bool(CC.latActive) and not self.driver_steer_override
     apply_steer = apply_std_steer_angle_limits(
-          CC.actuators.steeringAngleDeg,
-          self.apply_angle_last,
-          CS.out.vEgoRaw,
-          CS.out.steeringAngleDeg,
-          CC.latActive,
-          self.p.ANGLE_LIMITS
-        )
+      CC.actuators.steeringAngleDeg,
+      self.apply_angle_last,
+      CS.out.vEgoRaw,
+      meas,
+      lat_active_cmd,
+      self.p.ANGLE_LIMITS,
+    )
 
-    if not CC.latActive:
-      apply_steer = CS.out.steeringAngleDeg
+    if not lat_active_cmd:
+      # Follow hand/brake exactly with request cleared — safe inactive for panda/EPS
+      apply_steer = meas
 
     self.apply_angle_last = apply_steer
-    self.lat_active_prev = CC.latActive
-    return subarucan.create_steering_control_angle(self.packer, apply_steer, CC.latActive)
+    self.lat_active_prev = bool(CC.latActive)
+    return subarucan.create_steering_control_angle(self.packer, apply_steer, lat_active_cmd)
 
   def handle_torque_lateral(self, CC, CS):
     apply_torque = int(round(CC.actuators.torque * self.p.STEER_MAX))

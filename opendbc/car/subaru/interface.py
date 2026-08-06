@@ -52,6 +52,11 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & SubaruFlags.LKAS_ANGLE:
       ret.steerControlType = structs.CarParams.SteerControlType.angle
       ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.LKAS_ANGLE.value
+      # More time before "Turn Exceeds Steering Limit" on bends (angle rate soft-limited)
+      ret.steerLimitTimer = 1.0
+      if candidate == CAR.SUBARU_OUTBACK_2023:
+        # Angle LKAS: slightly more delay helps model look-ahead on curves
+        ret.steerActuatorDelay = 0.2
 
     elif candidate == CAR.SUBARU_ASCENT:
       ret.steerActuatorDelay = 0.3  # end-to-end angle controller

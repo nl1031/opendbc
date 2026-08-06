@@ -85,7 +85,14 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
 
-    steer_threshold = 75 if self.CP.flags & SubaruFlags.PREGLOBAL else 80
+    # LKAS_ANGLE: match carcontroller hand-priority (~45). Stock 80 is late —
+    # light hand input keeps latActive and OP fights EPS → Steer_Error_1 / LKAS Fault.
+    if self.CP.flags & SubaruFlags.PREGLOBAL:
+      steer_threshold = 75
+    elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
+      steer_threshold = 45
+    else:
+      steer_threshold = 80
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
 
     cp_cruise = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
