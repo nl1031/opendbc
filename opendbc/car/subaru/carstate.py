@@ -40,14 +40,12 @@ class CarState(CarStateBase, MadsCarState):
     if not (self.CP.flags & SubaruFlags.HYBRID):
       eyesight_fault = bool(cp_es_distance.vl["ES_Distance"]["Cruise_Fault"])
 
-      # Match openpilot_justin/outback-23 for LKAS_ANGLE: do NOT map EyeSight Cruise_Fault
-      # into accFaulted (that path causes "Cruise Fault: Restart the car" disengage).
-      # Still surface the bit when OP is controlling long (non-critical).
+      # JacobW: if openpilot is controlling long, an eyesight fault is a non-critical fault.
+      # otherwise it's an ACC fault.
       if self.CP.openpilotLongitudinalControl:
         ret.carFaultedNonCritical = eyesight_fault
-      elif not (self.CP.flags & SubaruFlags.LKAS_ANGLE):
+      else:
         ret.accFaulted = eyesight_fault
-      # else: LKAS_ANGLE stock-long — ignore Cruise_Fault for OP events (justin behavior)
 
     cp_wheels = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
     self.parse_wheel_speeds(ret,
@@ -70,39 +68,29 @@ class CarState(CarStateBase, MadsCarState):
     can_gear = int(cp_transmission.vl["Transmission"]["Gear"])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
 
-    # LKAS_ANGLE: Steering_2 must match panda safety angle_meas (0.01 deg scale).
-    # Using Steering_Torque (different scale) for inactive 0x124 makes panda drop TX
-    # while relay blocks stock → permanent LKAS Fault until car restart.
-    if self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      ret.steeringAngleDeg = cp.vl["Steering_2"]["Steering_Angle"]
-      steer_counter = cp.vl["Steering_2"]["COUNTER"]
-    else:
+    if not (self.CP.flags & SubaruFlags.LKAS_ANGLE):
       ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
       steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
+    else:
+      # JacobW: Steering_Torque->Steering_Angle is always zero on newer LKAS_ANGLE cars.
+      # Use Steering_2 universally for LKAS_ANGLE (matches panda safety angle_meas).
+      ret.steeringAngleDeg = cp.vl["Steering_2"]["Steering_Angle"]
+      steer_counter = cp.vl["Steering_2"]["COUNTER"]
 
     if not (self.CP.flags & SubaruFlags.PREGLOBAL):
       # ideally we get this from the car, but unclear if it exists. diagnostic software doesn't even have it
+      # sunnypilot CanSignalRateCalculator uses message COUNTER (Jacob tree uses bool "updated")
       ret.steeringRateDeg = self.angle_rate_calulator.update(ret.steeringAngleDeg, steer_counter)
 
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
 
-    # LKAS_ANGLE: match carcontroller hand-priority (~45). Stock 80 is too late —
-    # light hand input keeps latActive and OP fights EPS → EyeSight/LKAS Fault.
-    if self.CP.flags & SubaruFlags.PREGLOBAL:
-      steer_threshold = 75
-    elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      steer_threshold = 45
-    else:
-      steer_threshold = 80
+    steer_threshold = 75 if self.CP.flags & SubaruFlags.PREGLOBAL else 80
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
 
     cp_cruise = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
-    if self.CP.flags & SubaruFlags.HYBRID:
-      ret.cruiseState.enabled = cp_cam.vl["ES_DashStatus"]['Cruise_Activated'] != 0
-      ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
-    elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      # Match panda safety pcm_cruise_check (ES_Brake bit) + JacobW
+    if self.CP.flags & (SubaruFlags.HYBRID | SubaruFlags.LKAS_ANGLE):
+      # JacobW: ES_Status missing on hybrid; LKAS_ANGLE uses ES_Brake (matches panda pcm_cruise_check)
       ret.cruiseState.enabled = cp_es_brake.vl["ES_Brake"]['Cruise_Activated'] != 0
       ret.cruiseState.available = cp_cam.vl["ES_DashStatus"]['Cruise_On'] != 0
     else:

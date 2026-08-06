@@ -18,12 +18,16 @@ class CarInterface(CarInterfaceBase):
     # - replacement for ES_Distance so we can cancel the cruise control
     # - to find the Cruise_Activated bit from the car
     # - proper panda safety setup (use the correct cruise_activated bit, throttle from Throttle_Hybrid, etc)
-    # Experimental: unlock LKAS_ANGLE lateral (Outback 2023 etc.) on this fork.
-    # Keep Pre-Global / Hybrid dashcam policy from stock sunnypilot/openpilot.
-    ret.dashcamOnly = bool(ret.flags & (SubaruFlags.PREGLOBAL | SubaruFlags.HYBRID))
-    # Gen1 angle (Forester 2022) less validated — keep dashcam until tested
+    # for LKAS_ANGLE CARS to be upstreamed, we need:
+    # - validate angle safety
+    # JacobW: LKAS_ANGLE is dashcamOnly only on release builds (is_release).
+    ret.dashcamOnly = bool((ret.flags & (SubaruFlags.PREGLOBAL | SubaruFlags.HYBRID)) or
+                       ((ret.flags & SubaruFlags.LKAS_ANGLE) and is_release))
+
     if candidate == CAR.SUBARU_FORESTER_2022:
+      # Gen 1 LKAS angle not tested, can undashcam if not release once we see a test route
       ret.dashcamOnly = True
+
     ret.autoResumeSng = False
 
     # Detect infotainment message sent from the camera
@@ -38,21 +42,18 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.subaru)]
       if ret.flags & SubaruFlags.GLOBAL_GEN2:
         ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.GEN2.value
-      if ret.flags & SubaruFlags.LKAS_ANGLE:
-        ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.LKAS_ANGLE.value
 
     ret.steerLimitTimer = 0.4
     ret.steerActuatorDelay = 0.1
 
-    if ret.flags & SubaruFlags.LKAS_ANGLE:
-      ret.steerControlType = structs.CarParams.SteerControlType.angle
-      # Angle rate caps + EPS lag: stock 0.4s saturates too easily on bends →
-      # "Take Control / Turn Exceeds Steering Limit". Give more time before alert.
-      ret.steerLimitTimer = 1.0
-    else:
+    if not (ret.flags & SubaruFlags.LKAS_ANGLE):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
-    if candidate in (CAR.SUBARU_ASCENT, CAR.SUBARU_ASCENT_2023):
+    if ret.flags & SubaruFlags.LKAS_ANGLE:
+      ret.steerControlType = structs.CarParams.SteerControlType.angle
+      ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.LKAS_ANGLE.value
+
+    elif candidate == CAR.SUBARU_ASCENT:
       ret.steerActuatorDelay = 0.3  # end-to-end angle controller
       ret.lateralTuning.init('pid')
       ret.lateralTuning.pid.kf = 0.00003
@@ -75,16 +76,12 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.SUBARU_CROSSTREK_HYBRID:
       ret.steerActuatorDelay = 0.1
 
-    elif candidate in (CAR.SUBARU_FORESTER, CAR.SUBARU_FORESTER_2022, CAR.SUBARU_FORESTER_HYBRID):
+    elif candidate in (CAR.SUBARU_FORESTER, CAR.SUBARU_FORESTER_HYBRID):
       ret.lateralTuning.init('pid')
       ret.lateralTuning.pid.kf = 0.000038
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0., 14., 23.], [0., 14., 23.]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.01, 0.065, 0.2], [0.001, 0.015, 0.025]]
 
-    elif candidate == CAR.SUBARU_OUTBACK_2023:
-      # Angle LKAS: a bit more delay helps model look-ahead on curves (was 0.1 with
-      # torque-era Outback). Tune further from routes if still late into bends.
-      ret.steerActuatorDelay = 0.2
     elif candidate in (CAR.SUBARU_OUTBACK, CAR.SUBARU_LEGACY):
       ret.steerActuatorDelay = 0.1
 
@@ -115,9 +112,10 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
                      car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParamsSP:
-    # Unlock Pre-Global (sunnypilot stock). LKAS_ANGLE unlocked in _get_params for this experimental fork.
-    # Keep Hybrid dashcam-only.
-    stock_cp.dashcamOnly = bool(stock_cp.flags & SubaruFlags.HYBRID)
+    # sunnypilot: unlock Pre-Global for lateral. Hybrid stays dashcam.
+    # JacobW LKAS_ANGLE dashcamOnly policy (is_release) is set in _get_params — do not override.
+    if stock_cp.flags & SubaruFlags.PREGLOBAL:
+      stock_cp.dashcamOnly = False
     if candidate == CAR.SUBARU_FORESTER_2022:
       stock_cp.dashcamOnly = True
 
@@ -133,4 +131,4 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def deinit(CP, can_recv, can_send):
     communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, uds.CONTROL_TYPE.ENABLE_RX_ENABLE_TX, uds.MESSAGE_TYPE.NORMAL])
-    CarInterface.init(CP, can_recv, can_send, communication_control)
+    CarInterface.init(CP, structs.CarParamsSP(), can_recv, can_send, communication_control)
