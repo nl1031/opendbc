@@ -19,10 +19,6 @@ class TestSubaruCarController(unittest.TestCase):
     cs = SimpleNamespace(out=SimpleNamespace(
       vEgoRaw=8.791,
       steeringAngleDeg=2.61,
-      steeringTorque=0.0,
-      steeringRateDeg=0.0,
-      brakePressed=False,
-      steeringPressed=False,
     ))
     cc = SimpleNamespace(
       latActive=True,

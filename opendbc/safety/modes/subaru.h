@@ -173,18 +173,17 @@ static void subaru_rx_hook(const CANPacket_t *msg) {
 static bool subaru_tx_hook(const CANPacket_t *msg) {
   const TorqueSteeringLimits SUBARU_STEERING_LIMITS      = SUBARU_STEERING_LIMITS_GENERATOR(2047, 50, 70);
   const TorqueSteeringLimits SUBARU_GEN2_STEERING_LIMITS = SUBARU_STEERING_LIMITS_GENERATOR(1000, 40, 40);
-  // 1 deg per TX all speeds (justin/outback-23). Must match CarControllerParams.ANGLE_LIMITS.
-  // JacobW 0.15@highway drops ES_LKAS_ANGLE while relay blocks stock → EPS/LKAS fault.
+  // JacobW openpilot_jacobwaller angle rate limits (must match CarControllerParams.ANGLE_LIMITS)
   const AngleSteeringLimits SUBARU_ANGLE_STEERING_LIMITS = {
     .max_angle = 545*100,
     .angle_deg_to_can = 100.,
     .angle_rate_up_lookup = {
       {0.0, 5.0, 35.0},
-      {1.0, 1.0, 1.0}
+      {5.0, 0.8, 0.15}
     },
     .angle_rate_down_lookup = {
       {0.0, 5.0, 35.0},
-      {1.0, 1.0, 1.0}
+      {5.0, 0.8, 0.15}
     },
   };
 
