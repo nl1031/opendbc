@@ -20,6 +20,7 @@ class TestSubaruCarController(unittest.TestCase):
       vEgoRaw=8.791,
       steeringAngleDeg=2.61,
       steeringTorque=0.0,
+      steeringRateDeg=0.0,
       brakePressed=False,
       steeringPressed=False,
     ))

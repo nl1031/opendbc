@@ -13,10 +13,12 @@ MAX_STEER_RATE_FRAMES = 7  # tx control frames needed before torque can be cut
 
 # Angle LKAS: same-frame hand/brake priority so EPS never fights the driver.
 # STEER_STEP=2 → this path runs ~50 Hz. Thresholds aligned with carstate.steeringPressed.
-# Keep ON high enough that road/self-align torque on gentle curves does not false-yield.
-ANGLE_DRIVER_TORQUE_ON = 45
-ANGLE_DRIVER_TORQUE_OFF = 20
-ANGLE_OVERRIDE_RELEASE_FRAMES = 8  # ~0.16 s before OP resumes after hands release
+# Road log 0000002a/2c (2026-08-06): faults after hand input + high wheel rate re-engage.
+ANGLE_DRIVER_TORQUE_ON = 28          # earlier yield than 45 (logs showed fight at ~40+)
+ANGLE_DRIVER_TORQUE_OFF = 14
+ANGLE_OVERRIDE_RELEASE_FRAMES = 25   # ~0.5 s hold after hands quiet before OP resumes
+ANGLE_RATE_RESUME_MAX = 12.0         # deg/s — do not re-assert LKAS_Request until wheel is calm
+ANGLE_RATE_HOLD_MAX = 18.0           # deg/s — clear request while wheel is spinning this fast
 
 
 class CarController(CarControllerBase):
@@ -37,19 +39,22 @@ class CarController(CarControllerBase):
   def handle_angle_lateral(self, CC, CS):
     meas = float(CS.out.steeringAngleDeg)
     tq = abs(float(CS.out.steeringTorque))
+    rate = abs(float(getattr(CS.out, "steeringRateDeg", 0.0) or 0.0))
 
     # JacobW: re-anchor first active command to live steering so controller and
     # panda safety share the same reference.
     if CC.latActive and not self.lat_active_prev and not self.driver_steer_override:
       self.apply_angle_last = meas
 
-    # Hand / brake priority while OP engaged: clear LKAS_Request same frame as
-    # measured angle so EPS is not fought (prevents permanent Steer_Error_1).
+    # Hand / brake priority: clear LKAS_Request same frame as measured angle.
     if CS.out.brakePressed or tq >= ANGLE_DRIVER_TORQUE_ON or CS.out.steeringPressed:
       self.driver_steer_override = True
       self.override_release_counter = 0
     elif self.driver_steer_override:
-      if (not CS.out.brakePressed) and tq <= ANGLE_DRIVER_TORQUE_OFF and not CS.out.steeringPressed:
+      # Resume only when hands quiet AND wheel rate is low (avoid EPS fault on rebound).
+      hands_quiet = (not CS.out.brakePressed) and tq <= ANGLE_DRIVER_TORQUE_OFF and not CS.out.steeringPressed
+      rate_ok = rate <= ANGLE_RATE_RESUME_MAX
+      if hands_quiet and rate_ok:
         self.override_release_counter += 1
         if self.override_release_counter >= ANGLE_OVERRIDE_RELEASE_FRAMES:
           self.driver_steer_override = False
@@ -58,7 +63,10 @@ class CarController(CarControllerBase):
       else:
         self.override_release_counter = 0
 
-    lat_active_cmd = bool(CC.latActive) and not self.driver_steer_override
+    # High wheel rate: never assert LKAS_Request (even without hand-priority latch).
+    rate_block = rate > ANGLE_RATE_HOLD_MAX
+
+    lat_active_cmd = bool(CC.latActive) and not self.driver_steer_override and not rate_block
     apply_steer = apply_std_steer_angle_limits(
       CC.actuators.steeringAngleDeg,
       self.apply_angle_last,
@@ -69,7 +77,7 @@ class CarController(CarControllerBase):
     )
 
     if not lat_active_cmd:
-      # Follow hand/brake exactly with request cleared — safe inactive for panda/EPS
+      # Follow measured angle with request cleared — safe inactive for panda/EPS
       apply_steer = meas
 
     self.apply_angle_last = apply_steer

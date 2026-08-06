@@ -40,11 +40,13 @@ class CarState(CarStateBase, MadsCarState):
     if not (self.CP.flags & SubaruFlags.HYBRID):
       eyesight_fault = bool(cp_es_distance.vl["ES_Distance"]["Cruise_Fault"])
 
-      # JacobW: if openpilot is controlling long, an eyesight fault is a non-critical fault.
-      # otherwise it's an ACC fault.
+      # OP long: eyesight fault is non-critical.
+      # LKAS_ANGLE stock-long: do NOT map Cruise_Fault → accFaulted (justin/outback-23).
+      # Logs show accFaulted stacking right after EPS Steer_Error; ignoring this bit
+      # avoids extra disengage noise (EPS permanent fault is still handled via Steer_Error_1).
       if self.CP.openpilotLongitudinalControl:
         ret.carFaultedNonCritical = eyesight_fault
-      else:
+      elif not (self.CP.flags & SubaruFlags.LKAS_ANGLE):
         ret.accFaulted = eyesight_fault
 
     cp_wheels = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
@@ -85,12 +87,11 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
 
-    # LKAS_ANGLE: match carcontroller hand-priority (~45). Stock 80 is late —
-    # light hand input keeps latActive and OP fights EPS → Steer_Error_1 / LKAS Fault.
+    # LKAS_ANGLE: match carcontroller hand-priority (ANGLE_DRIVER_TORQUE_ON=28).
     if self.CP.flags & SubaruFlags.PREGLOBAL:
       steer_threshold = 75
     elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      steer_threshold = 45
+      steer_threshold = 28
     else:
       steer_threshold = 80
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
