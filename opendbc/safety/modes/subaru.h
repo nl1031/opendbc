@@ -174,18 +174,18 @@ static bool subaru_tx_hook(const CANPacket_t *msg) {
   const TorqueSteeringLimits SUBARU_STEERING_LIMITS      = SUBARU_STEERING_LIMITS_GENERATOR(2047, 50, 70);
   const TorqueSteeringLimits SUBARU_GEN2_STEERING_LIMITS = SUBARU_STEERING_LIMITS_GENERATOR(1000, 40, 40);
   // Outback 2023 LKAS_ANGLE (must match CarControllerParams.ANGLE_LIMITS)
-  // Curve authority: 3.0 low / 2.0 mid; floor 1°/TX highway (route 37 EPS-safe).
+  // Route 3c low-speed lag: 3.5 low / 2.2 mid; floor 1°/TX highway (EPS-safe).
   // Lookup tables are fixed 3-point (see safety AngleSteeringLimits).
   const AngleSteeringLimits SUBARU_ANGLE_STEERING_LIMITS = {
     .max_angle = 545*100,
     .angle_deg_to_can = 100.,
     .angle_rate_up_lookup = {
       {0.0, 5.0, 35.0},
-      {3.0, 2.0, 1.0}
+      {3.5, 2.2, 1.0}
     },
     .angle_rate_down_lookup = {
       {0.0, 5.0, 35.0},
-      {3.0, 2.0, 1.0}
+      {3.5, 2.2, 1.0}
     },
   };
 

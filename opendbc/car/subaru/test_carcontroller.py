@@ -174,7 +174,7 @@ class TestSubaruCarController(unittest.TestCase):
     self.controller.handle_angle_lateral(cc, cs)
     self.assertAlmostEqual(self.controller.apply_angle_last, 1.0, places=3)
 
-    # Low speed → 3.0°/TX
+    # Low speed → 3.5°/TX
     self.controller.lat_active_prev = False
     self.controller.apply_angle_last = 0.0
     cs = _cs(angle=0.0, rate=0.0, torque=5.0, v=0.0)
@@ -183,9 +183,9 @@ class TestSubaruCarController(unittest.TestCase):
     cs = _cs(angle=0.0, rate=0.0, torque=5.0, v=0.0)
     cc = _cc(lat_active=True, des_angle=20.0)
     self.controller.handle_angle_lateral(cc, cs)
-    self.assertAlmostEqual(self.controller.apply_angle_last, 3.0, places=2)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 3.5, places=2)
 
-    # Mid speed (5 m/s) → 2.0°/TX
+    # Mid speed (5 m/s) → 2.2°/TX
     self.controller.lat_active_prev = False
     self.controller.apply_angle_last = 0.0
     cs = _cs(angle=0.0, rate=0.0, torque=5.0, v=5.0)
@@ -194,7 +194,7 @@ class TestSubaruCarController(unittest.TestCase):
     cs = _cs(angle=0.0, rate=0.0, torque=5.0, v=5.0)
     cc = _cc(lat_active=True, des_angle=20.0)
     self.controller.handle_angle_lateral(cc, cs)
-    self.assertAlmostEqual(self.controller.apply_angle_last, 2.0, places=2)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 2.2, places=2)
 
   def test_lkas_angle_resume_no_des_meas_gate(self):
     """Yield resume does not require |des−meas| small."""

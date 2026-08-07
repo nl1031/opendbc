@@ -21,12 +21,12 @@ class CarControllerParams:
 
     # Outback 2023 angle rate (°/TX @ STEER_STEP=2 ≈ 50Hz).
     # Must match safety/modes/subaru.h SUBARU_ANGLE_STEERING_LIMITS (3 breakpoints only).
-    # Evolution: flat 1° slow → 2.5/1.6/1.0 still understeery on curves → 3.0/2.0/1.0.
-    # Highway floor stays 1° (route 37 EPS-safe). Mid raised for suburban bend authority.
+    # Route 3c: low-speed |des−meas| p90≈15–26° and rate-limit hits; raise low/mid.
+    # Highway floor stays 1° (EPS-safe).
     self.ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
       545,
-      ([0., 5., 35.], [3.0, 2.0, 1.0]),
-      ([0., 5., 35.], [3.0, 2.0, 1.0]),
+      ([0., 5., 35.], [3.5, 2.2, 1.0]),
+      ([0., 5., 35.], [3.5, 2.2, 1.0]),
     )
 
     # Yield / holdoff: anti-chatter + 0→1 first-frame=meas; looser so mid-bend

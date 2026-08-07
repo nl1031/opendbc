@@ -88,12 +88,14 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
 
-    # PREGLOBAL / global torque cars use ~75-80. LKAS_ANGLE: press fires before
-    # carcontroller hand-yield (45) so override UX and EPS fight less often.
+    # PREGLOBAL / global torque cars use ~75-80.
+    # LKAS_ANGLE: route 3c (2026-08-07) showed ~26% of enable time in steerOverride
+    # with road/light-hand torque p90≈32 and threshold 40. Align with HAND_YIELD=55
+    # so light grip does not drop latActive while real hand fight still overrides.
     if self.CP.flags & SubaruFlags.PREGLOBAL:
       steer_threshold = 75
     elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
-      steer_threshold = 40
+      steer_threshold = 55
     else:
       steer_threshold = 80
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
