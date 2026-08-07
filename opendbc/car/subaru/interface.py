@@ -52,6 +52,11 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & SubaruFlags.LKAS_ANGLE:
       ret.steerControlType = structs.CarParams.SteerControlType.angle
       ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.LKAS_ANGLE.value
+      # Angle path: more delay = earlier curve command (model preview).
+      # 0.1 default felt late; 0.15 still understeery on entry → 0.18.
+      if candidate in (CAR.SUBARU_OUTBACK_2023, CAR.SUBARU_ASCENT_2023):
+        ret.steerActuatorDelay = 0.18
+        ret.steerLimitTimer = 0.8  # angle cars: less "saturated" nag on brief lag
 
     elif candidate == CAR.SUBARU_ASCENT:
       ret.steerActuatorDelay = 0.3  # end-to-end angle controller

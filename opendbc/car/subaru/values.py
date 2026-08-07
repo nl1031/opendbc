@@ -19,12 +19,27 @@ class CarControllerParams:
     self.STEER_DRIVER_MULTIPLIER = 50  # weight driver torque heavily
     self.STEER_DRIVER_FACTOR = 1       # from dbc
 
-    # JacobW LKAS_ANGLE rate limits (must match safety/modes/subaru.h)
+    # Outback 2023 angle rate (°/TX @ STEER_STEP=2 ≈ 50Hz).
+    # Must match safety/modes/subaru.h SUBARU_ANGLE_STEERING_LIMITS (3 breakpoints only).
+    # Evolution: flat 1° slow → 2.5/1.6/1.0 still understeery on curves → 3.0/2.0/1.0.
+    # Highway floor stays 1° (route 37 EPS-safe). Mid raised for suburban bend authority.
     self.ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
       545,
-      ([0., 5., 35.], [5., .8, .15,]),
-      ([0., 5., 35.], [5., .8, .15,]),
+      ([0., 5., 35.], [3.0, 2.0, 1.0]),
+      ([0., 5., 35.], [3.0, 2.0, 1.0]),
     )
+
+    # Yield / holdoff: anti-chatter + 0→1 first-frame=meas; looser so mid-bend
+    # re-authority is not delayed after light road torque / brief hand touch.
+    self.LKAS_ANGLE_ENGAGE_MAX_ANGLE = 35.0   # deg |meas|; was 30 — less holdoff in bends
+    self.LKAS_ANGLE_ENGAGE_MAX_RATE = 30.0    # deg/s
+    self.LKAS_ANGLE_HAND_YIELD = 55          # road torque less likely to drop Request
+    self.LKAS_ANGLE_HAND_RESUME = 35         # resume sooner after light hands
+    # STEER_STEP=2 @100Hz → 20ms/TX. 8 TX ≈ 0.16s min yield (was 12/0.24s).
+    self.LKAS_ANGLE_YIELD_MIN_FRAMES = 8
+    self.LKAS_ANGLE_RESUME_CALM_FRAMES = 4    # ~0.08s (was 5/0.1s)
+    self.LKAS_ANGLE_LARGE_ANGLE_DEG = 22.0    # was 18 — treat mild bend as normal
+    self.LKAS_ANGLE_LARGE_ANGLE_CALM_FRAMES = 6  # ~0.12s (was 8/0.16s)
 
     if CP.flags & SubaruFlags.GLOBAL_GEN2:
       # TODO: lower rate limits, this reaches min/max in 0.5s which negatively affects tuning

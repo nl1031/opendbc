@@ -18,6 +18,12 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.apply_angle_last = 0
     self.lat_active_prev = False
+    # LKAS_ANGLE engage safety gates (see CarControllerParams)
+    self.angle_engage_holdoff = False
+    self.angle_hand_yielding = False
+    self.angle_yield_frames = 0         # STEER_STEP ticks spent yielding
+    self.angle_yield_calm_frames = 0     # consecutive calm ticks while yielding
+    self.angle_holdoff_calm_frames = 0   # consecutive calm ticks while holdoff
 
     self.cruise_button_prev = 0
     self.steer_rate_counter = 0
@@ -25,28 +31,128 @@ class CarController(CarControllerBase):
     self.p = CarControllerParams(CP)
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
 
-  def handle_angle_lateral(self, CC, CS):
-    # Re-anchor the first active command to the live steering angle so the
-    # controller and panda safety start from the same reference.
-    # (JacobW openpilot_jacobwaller)
-    if CC.latActive and not self.lat_active_prev:
-      self.apply_angle_last = CS.out.steeringAngleDeg
+  def _lkas_angle_conditions_calm(self, CS) -> bool:
+    """True when wheel rate/hand are calm enough to assert LKAS_Request."""
+    rate = abs(CS.out.steeringRateDeg)
+    hand = abs(CS.out.steeringTorque)
+    return (rate <= self.p.LKAS_ANGLE_ENGAGE_MAX_RATE and
+            hand <= self.p.LKAS_ANGLE_HAND_RESUME)
 
-    apply_steer = apply_std_steer_angle_limits(
-          CC.actuators.steeringAngleDeg,
-          self.apply_angle_last,
-          CS.out.vEgoRaw,
-          CS.out.steeringAngleDeg,
-          CC.latActive,
-          self.p.ANGLE_LIMITS
-        )
+  def _lkas_angle_resume_ok(self, CS) -> bool:
+    """Resume after hand-yield: calm rate + low hand (no |des−meas| gate — route 36)."""
+    return self._lkas_angle_conditions_calm(CS)
+
+  def _lkas_angle_holdoff_needed(self, CS) -> bool:
+    """Hold off Request=1 when wheel angle large or not calm / hands fighting."""
+    meas_abs = abs(CS.out.steeringAngleDeg)
+    hand = abs(CS.out.steeringTorque)
+    return (meas_abs > self.p.LKAS_ANGLE_ENGAGE_MAX_ANGLE or
+            not self._lkas_angle_conditions_calm(CS) or
+            hand >= self.p.LKAS_ANGLE_HAND_YIELD)
+
+  def _lkas_angle_holdoff_clear_frames(self, CS) -> int:
+    """More calm frames when |meas| is still large (gentler re-engage)."""
+    if abs(CS.out.steeringAngleDeg) >= self.p.LKAS_ANGLE_LARGE_ANGLE_DEG:
+      return self.p.LKAS_ANGLE_LARGE_ANGLE_CALM_FRAMES
+    return self.p.LKAS_ANGLE_RESUME_CALM_FRAMES
+
+  def handle_angle_lateral(self, CC, CS):
+    # Outback 2023 LKAS_ANGLE (routes 2e / 30 / 33 / 36):
+    # - Hard hand-yield only; min hold + calm debounce (no soft-yield chatter).
+    # - Resume without |des−meas| gate (that kept Request=0 too long then snapped).
+    # - Request 0→1 first TX: cmd = meas (dA=0), then rate-limit toward des (panda-safe).
+    # - Inactive: cmd = meas. Active (after first frame): rate-limit toward des.
+    meas = CS.out.steeringAngleDeg
+    hand = abs(CS.out.steeringTorque)
+    des = CC.actuators.steeringAngleDeg
+    lat_req = bool(CC.latActive)
+    rising_req = False  # Request 0→1 this tick — force cmd=meas
 
     if not CC.latActive:
-      apply_steer = CS.out.steeringAngleDeg
+      self.angle_engage_holdoff = False
+      self.angle_hand_yielding = False
+      self.angle_yield_frames = 0
+      self.angle_yield_calm_frames = 0
+      self.angle_holdoff_calm_frames = 0
+      lat_req = False
+    else:
+      # 1) Hard hand yield — never fight the driver
+      if hand >= self.p.LKAS_ANGLE_HAND_YIELD:
+        if not self.angle_hand_yielding:
+          self.angle_hand_yielding = True
+          self.angle_yield_frames = 1
+          self.angle_yield_calm_frames = 0
+        else:
+          self.angle_yield_frames += 1
+          self.angle_yield_calm_frames = 0
+      elif self.angle_hand_yielding:
+        self.angle_yield_frames += 1
+        min_hold = self.angle_yield_frames >= self.p.LKAS_ANGLE_YIELD_MIN_FRAMES
+        if min_hold and self._lkas_angle_resume_ok(CS):
+          self.angle_yield_calm_frames += 1
+        else:
+          self.angle_yield_calm_frames = 0
+        if (min_hold and
+            self.angle_yield_calm_frames >= self.p.LKAS_ANGLE_RESUME_CALM_FRAMES):
+          self.angle_hand_yielding = False
+          self.angle_yield_frames = 0
+          self.angle_yield_calm_frames = 0
+          self.apply_angle_last = meas
+          rising_req = True  # about to assert Request after yield
+
+      if self.angle_hand_yielding:
+        lat_req = False
+
+      # 2) Engage hold-off — large angle / not calm at rising edge
+      if self.angle_engage_holdoff:
+        can_clear = (CC.latActive and
+                     not self.angle_hand_yielding and
+                     self._lkas_angle_conditions_calm(CS) and
+                     hand < self.p.LKAS_ANGLE_HAND_YIELD and
+                     abs(meas) <= self.p.LKAS_ANGLE_ENGAGE_MAX_ANGLE)
+        need = self._lkas_angle_holdoff_clear_frames(CS)
+        if can_clear:
+          self.angle_holdoff_calm_frames += 1
+          if self.angle_holdoff_calm_frames >= need:
+            self.apply_angle_last = meas
+            self.angle_engage_holdoff = False
+            self.angle_holdoff_calm_frames = 0
+            rising_req = True
+          else:
+            lat_req = False
+        else:
+          self.angle_holdoff_calm_frames = 0
+          lat_req = False
+      elif lat_req and not self.lat_active_prev:
+        # Rising edge of latActive path
+        self.apply_angle_last = meas
+        if self._lkas_angle_holdoff_needed(CS):
+          self.angle_engage_holdoff = True
+          self.angle_holdoff_calm_frames = 0
+          lat_req = False
+        else:
+          rising_req = True
+
+    if not lat_req:
+      # Inactive: TX must match measured (panda inactive angle check).
+      apply_steer = meas
+    elif rising_req:
+      # First Request=1 frame: cmd = meas so dA vs last inactive TX is ~0 (route 36).
+      apply_steer = meas
+      self.apply_angle_last = meas
+    else:
+      apply_steer = apply_std_steer_angle_limits(
+            des,
+            self.apply_angle_last,
+            CS.out.vEgoRaw,
+            meas,
+            True,
+            self.p.ANGLE_LIMITS
+          )
 
     self.apply_angle_last = apply_steer
-    self.lat_active_prev = CC.latActive
-    return subarucan.create_steering_control_angle(self.packer, apply_steer, CC.latActive)
+    self.lat_active_prev = lat_req
+    return subarucan.create_steering_control_angle(self.packer, apply_steer, lat_req)
 
   def handle_torque_lateral(self, CC, CS):
     apply_torque = int(round(CC.actuators.torque * self.p.STEER_MAX))

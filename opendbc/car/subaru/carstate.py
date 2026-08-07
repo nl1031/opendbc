@@ -42,7 +42,10 @@ class CarState(CarStateBase, MadsCarState):
 
       # JacobW: if openpilot is controlling long, an eyesight fault is a non-critical fault.
       # otherwise it's an ACC fault.
-      if self.CP.openpilotLongitudinalControl:
+      # LKAS_ANGLE stock-long: Cruise_Fault often latches with EPS LKAS faults and blocks
+      # re-engage with "Cruise Fault: Restart the car". Treat as non-critical so lateral
+      # recovery is not gated on a sticky eyesight bit (justin/outback-23 alignment).
+      if self.CP.openpilotLongitudinalControl or (self.CP.flags & SubaruFlags.LKAS_ANGLE):
         ret.carFaultedNonCritical = eyesight_fault
       else:
         ret.accFaulted = eyesight_fault
@@ -85,7 +88,14 @@ class CarState(CarStateBase, MadsCarState):
     ret.steeringTorque = cp.vl["Steering_Torque"]["Steer_Torque_Sensor"]
     ret.steeringTorqueEps = cp.vl["Steering_Torque"]["Steer_Torque_Output"]
 
-    steer_threshold = 75 if self.CP.flags & SubaruFlags.PREGLOBAL else 80
+    # PREGLOBAL / global torque cars use ~75-80. LKAS_ANGLE: press fires before
+    # carcontroller hand-yield (45) so override UX and EPS fight less often.
+    if self.CP.flags & SubaruFlags.PREGLOBAL:
+      steer_threshold = 75
+    elif self.CP.flags & SubaruFlags.LKAS_ANGLE:
+      steer_threshold = 40
+    else:
+      steer_threshold = 80
     ret.steeringPressed = abs(ret.steeringTorque) > steer_threshold
 
     cp_cruise = cp_alt if self.CP.flags & SubaruFlags.GLOBAL_GEN2 else cp
