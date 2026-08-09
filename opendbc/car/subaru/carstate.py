@@ -73,7 +73,9 @@ class CarState(CarStateBase, MadsCarState):
 
     if not (self.CP.flags & SubaruFlags.LKAS_ANGLE):
       ret.steeringAngleDeg = cp.vl["Steering_Torque"]["Steering_Angle"]
-      steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
+      # Pre-global Steering_Torque (0x371) has no COUNTER; only global/LKAS_ANGLE need it for rate.
+      if not (self.CP.flags & SubaruFlags.PREGLOBAL):
+        steer_counter = cp.vl["Steering_Torque"]["COUNTER"]
     else:
       # JacobW: Steering_Torque->Steering_Angle is always zero on newer LKAS_ANGLE cars.
       # Use Steering_2 universally for LKAS_ANGLE (matches panda safety angle_meas).
