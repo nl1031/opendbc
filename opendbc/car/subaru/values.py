@@ -21,12 +21,12 @@ class CarControllerParams:
 
     # Outback 2023 angle rate (°/TX @ STEER_STEP=2 ≈ 50Hz).
     # Must match safety/modes/subaru.h SUBARU_ANGLE_STEERING_LIMITS (3 breakpoints only).
-    # Keep low-speed authority, but cap highway recovery to 0.15°/TX (7.5°/s).
+    # Keep low-speed authority, but cap highway recovery to 0.20°/TX (10°/s).
     # This is a final actuator guard against path jumps and hand-yield re-entry.
     self.ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
       545,
-      ([0., 5., 15.], [3.5, 1.0, 0.15]),
-      ([0., 5., 15.], [3.5, 1.0, 0.15]),
+      ([0., 5., 15.], [3.5, 1.0, 0.20]),
+      ([0., 5., 15.], [3.5, 1.0, 0.20]),
     )
 
     # Conservative hand-yield recovery. STEER_STEP=2 @100Hz means 20ms/TX.
