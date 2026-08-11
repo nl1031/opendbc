@@ -61,6 +61,20 @@ class TestSubaruCarController(unittest.TestCase):
     # apply tracks measured while held off
     self.assertAlmostEqual(self.controller.apply_angle_last, 44.0)
 
+  def test_lkas_angle_far_target_engages_from_measured(self):
+    """A far target must not deadlock Request; first command still starts at measured."""
+    cs = _cs(angle=0.0, rate=0.0, torque=0.0, v=25.0)
+    cc = _cc(lat_active=True, des_angle=5.0)
+
+    self.controller.handle_angle_lateral(cc, cs)
+    self.assertFalse(self.controller.angle_engage_holdoff)
+    self.assertTrue(self.controller.lat_active_prev)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 0.0)
+
+    # The next TX approaches the far target only by the highway rate cap.
+    self.controller.handle_angle_lateral(cc, cs)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 0.15, places=3)
+
   def test_lkas_angle_hand_yield(self):
     """High hand torque yields LKAS_Request even after a calm engage."""
     # Calm engage first
@@ -111,7 +125,7 @@ class TestSubaruCarController(unittest.TestCase):
                       f"resumed too early at yield_frame={i+1}")
 
   def test_lkas_angle_yield_resumes_after_hold_and_calm(self):
-    """Resume after min hold + consecutive calm frames (even if des far from meas)."""
+    """Resume after min hold + consecutive calm frames even when target is far."""
     cs = _cs(angle=5.0, rate=0.0, torque=10.0, v=10.0)
     cc = _cc(lat_active=True, des_angle=5.0)
     self.controller.handle_angle_lateral(cc, cs)
@@ -122,12 +136,12 @@ class TestSubaruCarController(unittest.TestCase):
 
     min_frames = self.controller.p.LKAS_ANGLE_YIELD_MIN_FRAMES
     calm_need = self.controller.p.LKAS_ANGLE_RESUME_CALM_FRAMES
-    # des far from meas (would have blocked old RESUME_MAX_ERR_DEG=3 gate)
+    # Desired/measured error does not gate Request; first-frame locking and slew do.
     for _ in range(min_frames + calm_need + 2):
       if not self.controller.angle_hand_yielding:
         break
       cs = _cs(angle=12.0, rate=0.0, torque=10.0, v=10.0)
-      cc = _cc(lat_active=True, des_angle=2.0)
+      cc = _cc(lat_active=True, des_angle=0.0)
       self.controller.handle_angle_lateral(cc, cs)
 
     self.assertFalse(self.controller.angle_hand_yielding)
@@ -147,11 +161,11 @@ class TestSubaruCarController(unittest.TestCase):
     self.assertTrue(self.controller.angle_engage_holdoff)
     self.assertFalse(self.controller.lat_active_prev)
 
-    # |meas|=10 < LARGE_ANGLE → RESUME_CALM_FRAMES; des may differ from meas
+    # |meas|=10 < LARGE_ANGLE → RESUME_CALM_FRAMES; target distance is irrelevant.
     calm_need = self.controller.p.LKAS_ANGLE_RESUME_CALM_FRAMES
     for _ in range(calm_need + 2):
       cs = _cs(angle=10.0, rate=2.0, torque=10.0, v=8.0)
-      cc = _cc(lat_active=True, des_angle=5.0)
+      cc = _cc(lat_active=True, des_angle=-10.0)
       self.controller.handle_angle_lateral(cc, cs)
       if not self.controller.angle_engage_holdoff:
         # First Request=1 frame after holdoff: cmd = meas
@@ -163,7 +177,7 @@ class TestSubaruCarController(unittest.TestCase):
 
   def test_lkas_angle_active_rate_limited(self):
     """After first-frame meas lock, active path respects speed-dependent °/TX."""
-    # High speed → 1.0°/TX floor
+    # High speed → 0.15°/TX cap
     cs = _cs(angle=0.0, rate=0.0, torque=5.0, v=35.0)
     cc = _cc(lat_active=True, des_angle=0.0)
     self.controller.handle_angle_lateral(cc, cs)
@@ -172,7 +186,7 @@ class TestSubaruCarController(unittest.TestCase):
     cs = _cs(angle=0.2, rate=0.0, torque=5.0, v=35.0)
     cc = _cc(lat_active=True, des_angle=20.0)
     self.controller.handle_angle_lateral(cc, cs)
-    self.assertAlmostEqual(self.controller.apply_angle_last, 1.0, places=3)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 0.15, places=3)
 
     # Low speed → 3.5°/TX
     self.controller.lat_active_prev = False
@@ -185,7 +199,7 @@ class TestSubaruCarController(unittest.TestCase):
     self.controller.handle_angle_lateral(cc, cs)
     self.assertAlmostEqual(self.controller.apply_angle_last, 3.5, places=2)
 
-    # Mid speed (5 m/s) → 2.2°/TX
+    # Mid speed (5 m/s) → 1.0°/TX
     self.controller.lat_active_prev = False
     self.controller.apply_angle_last = 0.0
     cs = _cs(angle=0.0, rate=0.0, torque=5.0, v=5.0)
@@ -194,24 +208,66 @@ class TestSubaruCarController(unittest.TestCase):
     cs = _cs(angle=0.0, rate=0.0, torque=5.0, v=5.0)
     cc = _cc(lat_active=True, des_angle=20.0)
     self.controller.handle_angle_lateral(cc, cs)
-    self.assertAlmostEqual(self.controller.apply_angle_last, 2.2, places=2)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 1.0, places=2)
 
-  def test_lkas_angle_resume_no_des_meas_gate(self):
-    """Yield resume does not require |des−meas| small."""
-    cs = _cs(angle=5.0, rate=0.0, torque=10.0, v=10.0)
-    self.controller.handle_angle_lateral(_cc(True, 5.0), cs)
+  def test_lkas_angle_resume_with_far_target_starts_at_measured(self):
+    """A far planner target resumes safely instead of leaving Request off forever."""
+    self.controller.handle_angle_lateral(_cc(True, 5.0), _cs(5.0, 0.0, 10.0, 10.0))
     self.controller.handle_angle_lateral(_cc(True, 5.0), _cs(8.0, 0.0, 100.0, 10.0))
     self.assertTrue(self.controller.angle_hand_yielding)
+
+    n = (self.controller.p.LKAS_ANGLE_YIELD_MIN_FRAMES +
+         self.controller.p.LKAS_ANGLE_RESUME_CALM_FRAMES + 10)
+    for _ in range(n):
+      if not self.controller.angle_hand_yielding:
+        break
+      self.controller.handle_angle_lateral(
+        _cc(True, 0.0), _cs(angle=8.0, rate=0.0, torque=10.0, v=10.0))
+
+    self.assertFalse(self.controller.angle_hand_yielding)
+    self.assertTrue(self.controller.lat_active_prev)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 8.0)
+
+  def test_lkas_angle_repeat_override_uses_finite_calm_cooldown(self):
+    """A second correction pauses control, then retries without cycling latActive."""
+    self.controller.handle_angle_lateral(_cc(True, 1.0), _cs(1.0, 0.0, 10.0, 25.0))
+    self.controller.handle_angle_lateral(_cc(True, 1.0), _cs(2.0, 0.0, 100.0, 25.0))
 
     n = (self.controller.p.LKAS_ANGLE_YIELD_MIN_FRAMES +
          self.controller.p.LKAS_ANGLE_RESUME_CALM_FRAMES + 2)
     for _ in range(n):
       if not self.controller.angle_hand_yielding:
         break
-      # 8° error — old gate would never resume
       self.controller.handle_angle_lateral(
-        _cc(True, 0.0), _cs(angle=8.0, rate=0.0, torque=10.0, v=10.0))
+        _cc(True, 2.0), _cs(angle=2.0, rate=0.0, torque=10.0, v=25.0))
+
     self.assertFalse(self.controller.angle_hand_yielding)
+    self.assertGreater(self.controller.angle_resume_monitor_frames, 0)
+
+    self.controller.handle_angle_lateral(
+      _cc(True, 2.0), _cs(angle=2.0, rate=0.0, torque=100.0, v=25.0))
+    cooldown = self.controller.p.LKAS_ANGLE_RECONFLICT_COOLDOWN_FRAMES
+    self.assertEqual(self.controller.angle_reconflict_cooldown_frames, cooldown)
+    self.assertFalse(self.controller.lat_active_prev)
+
+    # Non-calm input restarts the finite cooldown.
+    for _ in range(5):
+      self.controller.handle_angle_lateral(
+        _cc(True, 20.0), _cs(angle=2.0, rate=20.0, torque=0.0, v=25.0))
+    self.assertEqual(self.controller.angle_reconflict_cooldown_frames, cooldown)
+    self.assertFalse(self.controller.lat_active_prev)
+
+    for _ in range(cooldown - 1):
+      self.controller.handle_angle_lateral(
+        _cc(True, 20.0), _cs(angle=2.0, rate=0.0, torque=0.0, v=25.0))
+    self.assertEqual(self.controller.angle_reconflict_cooldown_frames, 1)
+    self.assertFalse(self.controller.lat_active_prev)
+
+    self.controller.handle_angle_lateral(
+      _cc(True, 20.0), _cs(angle=2.0, rate=0.0, torque=0.0, v=25.0))
+    self.assertEqual(self.controller.angle_reconflict_cooldown_frames, 0)
+    self.assertTrue(self.controller.lat_active_prev)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 2.0)
 
 
 if __name__ == "__main__":

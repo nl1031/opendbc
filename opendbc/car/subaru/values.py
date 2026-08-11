@@ -21,25 +21,27 @@ class CarControllerParams:
 
     # Outback 2023 angle rate (°/TX @ STEER_STEP=2 ≈ 50Hz).
     # Must match safety/modes/subaru.h SUBARU_ANGLE_STEERING_LIMITS (3 breakpoints only).
-    # Route 3c: low-speed |des−meas| p90≈15–26° and rate-limit hits; raise low/mid.
-    # Highway floor stays 1° (EPS-safe).
+    # Keep low-speed authority, but cap highway recovery to 0.15°/TX (7.5°/s).
+    # This is a final actuator guard against path jumps and hand-yield re-entry.
     self.ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
       545,
-      ([0., 5., 35.], [3.5, 2.2, 1.0]),
-      ([0., 5., 35.], [3.5, 2.2, 1.0]),
+      ([0., 5., 15.], [3.5, 1.0, 0.15]),
+      ([0., 5., 15.], [3.5, 1.0, 0.15]),
     )
 
-    # Yield / holdoff: anti-chatter + 0→1 first-frame=meas; looser so mid-bend
-    # re-authority is not delayed after light road torque / brief hand touch.
-    self.LKAS_ANGLE_ENGAGE_MAX_ANGLE = 35.0   # deg |meas|; was 30 — less holdoff in bends
-    self.LKAS_ANGLE_ENGAGE_MAX_RATE = 30.0    # deg/s
-    self.LKAS_ANGLE_HAND_YIELD = 55          # road torque less likely to drop Request
-    self.LKAS_ANGLE_HAND_RESUME = 35         # resume sooner after light hands
-    # STEER_STEP=2 @100Hz → 20ms/TX. 8 TX ≈ 0.16s min yield (was 12/0.24s).
-    self.LKAS_ANGLE_YIELD_MIN_FRAMES = 8
-    self.LKAS_ANGLE_RESUME_CALM_FRAMES = 4    # ~0.08s (was 5/0.1s)
-    self.LKAS_ANGLE_LARGE_ANGLE_DEG = 22.0    # was 18 — treat mild bend as normal
-    self.LKAS_ANGLE_LARGE_ANGLE_CALM_FRAMES = 6  # ~0.12s (was 8/0.16s)
+    # Conservative hand-yield recovery. STEER_STEP=2 @100Hz means 20ms/TX.
+    # Desired/measured error is intentionally not an enable gate: while Request=0
+    # the actuator cannot close that error. First-frame locking + ANGLE_LIMITS do it safely.
+    self.LKAS_ANGLE_ENGAGE_MAX_ANGLE = 35.0
+    self.LKAS_ANGLE_ENGAGE_MAX_RATE = 10.0
+    self.LKAS_ANGLE_HAND_YIELD = 55
+    self.LKAS_ANGLE_HAND_RESUME = 25
+    self.LKAS_ANGLE_YIELD_MIN_FRAMES = 15           # 0.3s minimum yield
+    self.LKAS_ANGLE_RESUME_CALM_FRAMES = 10         # 0.2s consecutive calm (~0.5s total)
+    self.LKAS_ANGLE_LARGE_ANGLE_DEG = 22.0
+    self.LKAS_ANGLE_LARGE_ANGLE_CALM_FRAMES = 25    # 0.5s at large angle
+    self.LKAS_ANGLE_RECONFLICT_WINDOW_FRAMES = 100  # 2.0s after automatic resume
+    self.LKAS_ANGLE_RECONFLICT_COOLDOWN_FRAMES = 100  # 2.0s continuously calm, then retry
 
     if CP.flags & SubaruFlags.GLOBAL_GEN2:
       # TODO: lower rate limits, this reaches min/max in 0.5s which negatively affects tuning
