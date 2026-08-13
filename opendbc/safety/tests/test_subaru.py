@@ -224,6 +224,30 @@ class TestSubaruAngleSafetyBase(TestSubaruSafetyBase, common.AngleSteeringSafety
     values = {"Cruise_Activated": enable}
     return self.packer.make_can_msg_panda("ES_Brake", self.ALT_MAIN_BUS, values)
 
+  def _acc_main_msg(self, cruise_on):
+    values = {"Cruise_On": int(cruise_on)}
+    return self.packer.make_can_msg_panda("ES_DashStatus", SUBARU_CAM_BUS, values)
+
+  def test_lkas_angle_acc_main_on_from_dashstatus(self):
+    """Cruise_On (not Cruise_Activated) must drive acc_main_on for MADS."""
+    for enable_mads in (True, False):
+      with self.subTest("enable_mads", mads_enabled=enable_mads):
+        self.safety.set_mads_params(enable_mads, False, False)
+        self._rx(self._acc_main_msg(False))
+        self.assertFalse(self.safety.get_acc_main_on())
+        self._rx(self._acc_main_msg(True))
+        self.assertTrue(self.safety.get_acc_main_on())
+        self.assertEqual(enable_mads, self.safety.get_controls_allowed_lat())
+        self._rx(self._acc_main_msg(False))
+        self.assertFalse(self.safety.get_acc_main_on())
+
+  def test_lkas_angle_mads_button_releases(self):
+    self.safety.set_mads_params(True, False, False)
+    self._rx(self._lkas_button_msg(False, 2))
+    self.assertTrue(self.safety.get_controls_allowed_lat())
+    self._rx(self._lkas_button_msg(False, 0))
+    self.assertEqual(0, self.safety.get_mads_button_press())
+
 
 class TestSubaruGen1TorqueStockLongitudinalSafety(TestSubaruStockLongitudinalSafetyBase, TestSubaruTorqueSafetyBase):
   FLAGS = 0

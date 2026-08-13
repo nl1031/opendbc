@@ -129,16 +129,24 @@ static void subaru_rx_hook(const CANPacket_t *msg) {
     update_sample(&torque_driver, torque_driver_new);
   }
 
-  // MADS LKAS button (sunnypilot)
+  // MADS LKAS button (sunnypilot). Always write press/release — leaving the
+  // last PRESSED latched when Dash_State=0 kept MADS authorized incorrectly.
   if ((msg->addr == MSG_SUBARU_ES_LKAS_State) && (msg->bus == SUBARU_CAM_BUS)) {
     int lkas_hud = (msg->data[2] & 0x0CU) >> 2U;
     if ((lkas_hud >= 1) && (lkas_hud <= 3)) {
       mads_button_press = MADS_BUTTON_PRESSED;
+    } else {
+      mads_button_press = MADS_BUTTON_NOT_PRESSED;
     }
   }
 
   // enter controls on rising edge of ACC, exit controls on ACC off
   if (subaru_lkas_angle) {
+    // Outback 2023 has no CruiseControl.Cruise_On. Match CarState.available
+    // (ES_DashStatus.Cruise_On, bit 49) so MADS can authorize from ACC-main.
+    if ((msg->addr == MSG_SUBARU_ES_DashStatus) && (msg->bus == SUBARU_CAM_BUS)) {
+      acc_main_on = GET_BIT(msg, 49U);
+    }
     if ((msg->addr == MSG_SUBARU_ES_Brake) && (msg->bus == alt_main_bus)) {
       bool cruise_engaged = (msg->data[4] >> 7) & 1U;
       pcm_cruise_check(cruise_engaged);
