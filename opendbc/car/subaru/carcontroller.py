@@ -18,14 +18,9 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.apply_angle_last = 0
     self.lat_active_prev = False
-    # LKAS_ANGLE engage safety gates (see CarControllerParams)
-    self.angle_engage_holdoff = False
-    self.angle_hand_yielding = False
-    self.angle_yield_frames = 0         # STEER_STEP ticks spent yielding
-    self.angle_yield_calm_frames = 0     # consecutive calm ticks while yielding
-    self.angle_holdoff_calm_frames = 0   # consecutive calm ticks while holdoff
-    self.angle_resume_monitor_frames = 0      # watch for a repeated hard correction after resume
-    self.angle_reconflict_cooldown_frames = 0  # finite calm hold after a repeated correction
+    self.angle_yielding = False
+    self.angle_yield_frames = 0
+    self.angle_yield_calm_frames = 0
 
     self.cruise_button_prev = 0
     self.steer_rate_counter = 0
@@ -33,145 +28,74 @@ class CarController(CarControllerBase):
     self.p = CarControllerParams(CP)
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
 
-  def _lkas_angle_conditions_calm(self, CS) -> bool:
-    """True when wheel rate/hand are calm enough to assert LKAS_Request."""
-    rate = abs(CS.out.steeringRateDeg)
+  def _lkas_angle_hard_conflict(self, CS, requesting: bool) -> bool:
+    """True when EPS is likely to latch if Request stays 1 (route 2e)."""
+    p = self.p
     hand = abs(CS.out.steeringTorque)
-    return (rate <= self.p.LKAS_ANGLE_ENGAGE_MAX_RATE and
-            hand <= self.p.LKAS_ANGLE_HAND_RESUME)
+    rate = abs(CS.out.steeringRateDeg)
+    meas = CS.out.steeringAngleDeg
+    if hand >= p.LKAS_ANGLE_HAND_YIELD:
+      return True
+    if rate >= p.LKAS_ANGLE_RATE_YIELD:
+      return True
+    if abs(meas) >= p.LKAS_ANGLE_MAX_MEAS:
+      return True
+    if requesting and abs(self.apply_angle_last - meas) >= p.LKAS_ANGLE_CMD_MEAS_MAX:
+      return True
+    return False
 
   def _lkas_angle_resume_ok(self, CS) -> bool:
-    """Resume when hands and wheel are calm; command slew limits prevent a snap."""
-    return self._lkas_angle_conditions_calm(CS)
-
-  def _lkas_angle_holdoff_needed(self, CS) -> bool:
-    """Hold off Request=1 when wheel angle large or not calm / hands fighting."""
-    meas_abs = abs(CS.out.steeringAngleDeg)
-    hand = abs(CS.out.steeringTorque)
-    return (meas_abs > self.p.LKAS_ANGLE_ENGAGE_MAX_ANGLE or
-            not self._lkas_angle_conditions_calm(CS) or
-            hand >= self.p.LKAS_ANGLE_HAND_YIELD)
-
-  def _lkas_angle_holdoff_clear_frames(self, CS) -> int:
-    """More calm frames when |meas| is still large (gentler re-engage)."""
-    if abs(CS.out.steeringAngleDeg) >= self.p.LKAS_ANGLE_LARGE_ANGLE_DEG:
-      return self.p.LKAS_ANGLE_LARGE_ANGLE_CALM_FRAMES
-    return self.p.LKAS_ANGLE_RESUME_CALM_FRAMES
+    p = self.p
+    return (abs(CS.out.steeringTorque) <= p.LKAS_ANGLE_HAND_RESUME and
+            abs(CS.out.steeringRateDeg) <= p.LKAS_ANGLE_RATE_RESUME and
+            abs(CS.out.steeringAngleDeg) < p.LKAS_ANGLE_MAX_MEAS)
 
   def handle_angle_lateral(self, CC, CS):
-    # Outback 2023 LKAS_ANGLE (routes 2e / 30 / 33 / 36):
-    # - Hard hand-yield only; min hold + calm debounce. Desired/measured error never
-    #   disables Request: first-frame locking and command slew limits prevent a snap.
-    # - A second hard correction soon after resume starts a finite calm cooldown.
-    # - Request 0→1 first TX: cmd = meas (dA=0), then rate-limit toward des (panda-safe).
-    # - Inactive: cmd = meas. Active (after first frame): rate-limit toward des.
+    # Request=latActive unless a hard conflict (hand / rate / large angle /
+    # cmd lag). First Request 0→1 TX is always cmd=meas (route 29 panda latch).
+    # Desired-measured error is never a resume gate (that deadlocked Request).
     meas = CS.out.steeringAngleDeg
-    hand = abs(CS.out.steeringTorque)
-    des = CC.actuators.steeringAngleDeg
     lat_req = bool(CC.latActive)
-    rising_req = False  # Request 0→1 this tick — force cmd=meas
+    rising_req = False
 
     if not CC.latActive:
-      self.angle_engage_holdoff = False
-      self.angle_hand_yielding = False
+      self.angle_yielding = False
       self.angle_yield_frames = 0
       self.angle_yield_calm_frames = 0
-      self.angle_holdoff_calm_frames = 0
-      self.angle_resume_monitor_frames = 0
-      self.angle_reconflict_cooldown_frames = 0
       lat_req = False
     else:
-      # A repeated hard correction just after automatic resume means the driver
-      # and planner still disagree. Require a finite calm period before retrying.
-      if (hand >= self.p.LKAS_ANGLE_HAND_YIELD and
-          self.angle_resume_monitor_frames > 0):
-        self.angle_reconflict_cooldown_frames = self.p.LKAS_ANGLE_RECONFLICT_COOLDOWN_FRAMES
-        self.angle_hand_yielding = False
-        self.angle_yield_frames = 0
+      if self._lkas_angle_hard_conflict(CS, requesting=self.lat_active_prev):
+        if not self.angle_yielding:
+          self.angle_yielding = True
+          self.angle_yield_frames = 0
+          self.angle_yield_calm_frames = 0
+        self.angle_yield_frames += 1
         self.angle_yield_calm_frames = 0
-      if self.angle_resume_monitor_frames > 0:
-        self.angle_resume_monitor_frames -= 1
-
-      if self.angle_reconflict_cooldown_frames > 0:
         lat_req = False
-        if self._lkas_angle_conditions_calm(CS):
-          self.angle_reconflict_cooldown_frames -= 1
-          if self.angle_reconflict_cooldown_frames == 0:
-            self.apply_angle_last = meas
-            rising_req = True
-            lat_req = True
+      elif self.angle_yielding:
+        self.angle_yield_frames += 1
+        min_hold = self.angle_yield_frames >= self.p.LKAS_ANGLE_YIELD_MIN_FRAMES
+        if min_hold and self._lkas_angle_resume_ok(CS):
+          self.angle_yield_calm_frames += 1
         else:
-          # Cooldown is measured from the last non-calm frame, not the first conflict.
-          self.angle_reconflict_cooldown_frames = self.p.LKAS_ANGLE_RECONFLICT_COOLDOWN_FRAMES
-      else:
-        # 1) Hard hand yield — never fight the driver
-        if hand >= self.p.LKAS_ANGLE_HAND_YIELD:
-          if not self.angle_hand_yielding:
-            self.angle_hand_yielding = True
-            self.angle_yield_frames = 1
-            self.angle_yield_calm_frames = 0
-          else:
-            self.angle_yield_frames += 1
-            self.angle_yield_calm_frames = 0
-        elif self.angle_hand_yielding:
-          self.angle_yield_frames += 1
-          min_hold = self.angle_yield_frames >= self.p.LKAS_ANGLE_YIELD_MIN_FRAMES
-          if min_hold and self._lkas_angle_resume_ok(CS):
-            self.angle_yield_calm_frames += 1
-          else:
-            self.angle_yield_calm_frames = 0
-          if (min_hold and
-              self.angle_yield_calm_frames >= self.p.LKAS_ANGLE_RESUME_CALM_FRAMES):
-            self.angle_hand_yielding = False
-            self.angle_yield_frames = 0
-            self.angle_yield_calm_frames = 0
-            self.angle_resume_monitor_frames = self.p.LKAS_ANGLE_RECONFLICT_WINDOW_FRAMES
-            self.apply_angle_last = meas
-            rising_req = True  # about to assert Request after yield
-
-        if self.angle_hand_yielding:
-          lat_req = False
-
-      # 2) Engage hold-off — large angle / not calm at rising edge
-      if self.angle_engage_holdoff:
-        can_clear = (CC.latActive and
-                     not self.angle_hand_yielding and
-                     self._lkas_angle_resume_ok(CS) and
-                     hand < self.p.LKAS_ANGLE_HAND_YIELD and
-                     abs(meas) <= self.p.LKAS_ANGLE_ENGAGE_MAX_ANGLE)
-        need = self._lkas_angle_holdoff_clear_frames(CS)
-        if can_clear:
-          self.angle_holdoff_calm_frames += 1
-          if self.angle_holdoff_calm_frames >= need:
-            self.apply_angle_last = meas
-            self.angle_engage_holdoff = False
-            self.angle_holdoff_calm_frames = 0
-            rising_req = True
-          else:
-            lat_req = False
-        else:
-          self.angle_holdoff_calm_frames = 0
-          lat_req = False
-      elif lat_req and not self.lat_active_prev:
-        # Rising edge of latActive path
-        self.apply_angle_last = meas
-        if self._lkas_angle_holdoff_needed(CS):
-          self.angle_engage_holdoff = True
-          self.angle_holdoff_calm_frames = 0
-          lat_req = False
-        else:
+          self.angle_yield_calm_frames = 0
+        if min_hold and self.angle_yield_calm_frames >= self.p.LKAS_ANGLE_RESUME_CALM_FRAMES:
+          self.angle_yielding = False
+          self.angle_yield_frames = 0
+          self.angle_yield_calm_frames = 0
           rising_req = True
+        else:
+          lat_req = False
+      elif not self.lat_active_prev:
+        rising_req = True
 
     if not lat_req:
-      # Inactive: TX must match measured (panda inactive angle check).
       apply_steer = meas
     elif rising_req:
-      # First Request=1 frame: cmd = meas so dA vs last inactive TX is ~0 (route 36).
       apply_steer = meas
-      self.apply_angle_last = meas
     else:
       apply_steer = apply_std_steer_angle_limits(
-            des,
+            CC.actuators.steeringAngleDeg,
             self.apply_angle_last,
             CS.out.vEgoRaw,
             meas,

@@ -19,29 +19,27 @@ class CarControllerParams:
     self.STEER_DRIVER_MULTIPLIER = 50  # weight driver torque heavily
     self.STEER_DRIVER_FACTOR = 1       # from dbc
 
-    # Outback 2023 angle rate (°/TX @ STEER_STEP=2 ≈ 50Hz).
-    # Must match safety/modes/subaru.h SUBARU_ANGLE_STEERING_LIMITS (3 breakpoints only).
-    # Keep low-speed authority, but cap highway recovery to 0.20°/TX (10°/s).
-    # This is a final actuator guard against path jumps and hand-yield re-entry.
+    # Match openpilot_jacobwaller (°/TX @ STEER_STEP=2 ≈ 50Hz).
+    # Must match safety/modes/subaru.h SUBARU_ANGLE_STEERING_LIMITS (3 breakpoints).
+    # At ~25 m/s this interpolates to ~0.37°/TX (~18°/s), vs the old 15 m/s floor
+    # of 0.20°/TX (10°/s) that could not keep a highway curve.
     self.ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
       545,
-      ([0., 5., 15.], [3.5, 1.0, 0.20]),
-      ([0., 5., 15.], [3.5, 1.0, 0.20]),
+      ([0., 5., 35.], [5., .8, .15]),
+      ([0., 5., 35.], [5., .8, .15]),
     )
 
-    # Conservative hand-yield recovery. STEER_STEP=2 @100Hz means 20ms/TX.
-    # Desired/measured error is intentionally not an enable gate: while Request=0
-    # the actuator cannot close that error. First-frame locking + ANGLE_LIMITS do it safely.
-    self.LKAS_ANGLE_ENGAGE_MAX_ANGLE = 35.0
-    self.LKAS_ANGLE_ENGAGE_MAX_RATE = 10.0
-    self.LKAS_ANGLE_HAND_YIELD = 55
-    self.LKAS_ANGLE_HAND_RESUME = 25
-    self.LKAS_ANGLE_YIELD_MIN_FRAMES = 15           # 0.3s minimum yield
-    self.LKAS_ANGLE_RESUME_CALM_FRAMES = 10         # 0.2s consecutive calm (~0.5s total)
-    self.LKAS_ANGLE_LARGE_ANGLE_DEG = 22.0
-    self.LKAS_ANGLE_LARGE_ANGLE_CALM_FRAMES = 25    # 0.5s at large angle
-    self.LKAS_ANGLE_RECONFLICT_WINDOW_FRAMES = 100  # 2.0s after automatic resume
-    self.LKAS_ANGLE_RECONFLICT_COOLDOWN_FRAMES = 100  # 2.0s continuously calm, then retry
+    # Hard yield (route 0000002e): Request=1 + 70–170°/s hand turn + |cmd-meas|~50°
+    # latched EPS even though panda accepted every TX. Light grip ~30–55 must NOT
+    # yield (that made OP feel weak). |des-meas| is not a resume gate (deadlock).
+    self.LKAS_ANGLE_HAND_YIELD = 120
+    self.LKAS_ANGLE_HAND_RESUME = 80
+    self.LKAS_ANGLE_RATE_YIELD = 50.0          # deg/s
+    self.LKAS_ANGLE_RATE_RESUME = 25.0
+    self.LKAS_ANGLE_MAX_MEAS = 40.0            # intersection / lock-to-lock
+    self.LKAS_ANGLE_CMD_MEAS_MAX = 10.0
+    self.LKAS_ANGLE_YIELD_MIN_FRAMES = 10      # 0.2s
+    self.LKAS_ANGLE_RESUME_CALM_FRAMES = 10    # 0.2s
 
     if CP.flags & SubaruFlags.GLOBAL_GEN2:
       # TODO: lower rate limits, this reaches min/max in 0.5s which negatively affects tuning
