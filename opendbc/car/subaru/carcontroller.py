@@ -21,6 +21,7 @@ class CarController(CarControllerBase):
     self.angle_yielding = False
     self.angle_yield_frames = 0
     self.angle_yield_calm_frames = 0
+    self.angle_conflict_frames = 0
 
     self.cruise_button_prev = 0
     self.steer_rate_counter = 0
@@ -28,26 +29,53 @@ class CarController(CarControllerBase):
     self.p = CarControllerParams(CP)
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
 
-  def _lkas_angle_hard_conflict(self, CS, requesting: bool) -> bool:
-    """True when EPS is likely to latch if Request stays 1 (route 2e)."""
+  def _lkas_angle_blinker(self, CS) -> bool:
+    return bool(getattr(CS.out, "leftBlinker", False) or getattr(CS.out, "rightBlinker", False))
+
+  def _lkas_angle_highway_manual(self, CS) -> bool:
+    # No turn signal: treat as a driver path correction, not ALC.
+    return CS.out.vEgoRaw >= self.p.LKAS_ANGLE_HWY_SPEED and not self._lkas_angle_blinker(CS)
+
+  def _lkas_angle_immediate_conflict(self, CS, requesting: bool) -> bool:
+    """EPS latch / low-speed hard fight — drop Request on the first frame."""
     p = self.p
-    hand = abs(CS.out.steeringTorque)
-    rate = abs(CS.out.steeringRateDeg)
     meas = CS.out.steeringAngleDeg
-    if hand >= p.LKAS_ANGLE_HAND_YIELD:
-      return True
-    if rate >= p.LKAS_ANGLE_RATE_YIELD:
-      return True
     if abs(meas) >= p.LKAS_ANGLE_MAX_MEAS:
       return True
     if requesting and abs(self.apply_angle_last - meas) >= p.LKAS_ANGLE_CMD_MEAS_MAX:
       return True
+    if self._lkas_angle_highway_manual(CS):
+      return False
+    if abs(CS.out.steeringTorque) >= p.LKAS_ANGLE_HAND_YIELD:
+      return True
+    if abs(CS.out.steeringRateDeg) >= p.LKAS_ANGLE_RATE_YIELD:
+      return True
     return False
+
+  def _lkas_angle_hwy_manual_conflict(self, CS) -> bool:
+    """Firm sustained highway input without blinker. Debounced by caller."""
+    if not self._lkas_angle_highway_manual(CS):
+      return False
+    p = self.p
+    return (abs(CS.out.steeringTorque) >= p.LKAS_ANGLE_HAND_YIELD_HWY or
+            abs(CS.out.steeringRateDeg) >= p.LKAS_ANGLE_RATE_YIELD_HWY)
+
+  def _lkas_angle_hard_conflict(self, CS, requesting: bool) -> bool:
+    if self._lkas_angle_immediate_conflict(CS, requesting):
+      return True
+    if not self._lkas_angle_hwy_manual_conflict(CS):
+      self.angle_conflict_frames = 0
+      return False
+    self.angle_conflict_frames += 1
+    return self.angle_conflict_frames >= self.p.LKAS_ANGLE_HWY_YIELD_DEBOUNCE
 
   def _lkas_angle_resume_ok(self, CS) -> bool:
     p = self.p
-    return (abs(CS.out.steeringTorque) <= p.LKAS_ANGLE_HAND_RESUME and
-            abs(CS.out.steeringRateDeg) <= p.LKAS_ANGLE_RATE_RESUME and
+    hwy_manual = self._lkas_angle_highway_manual(CS)
+    hand_ok = p.LKAS_ANGLE_HAND_RESUME_HWY if hwy_manual else p.LKAS_ANGLE_HAND_RESUME
+    rate_ok = p.LKAS_ANGLE_RATE_RESUME_HWY if hwy_manual else p.LKAS_ANGLE_RATE_RESUME
+    return (abs(CS.out.steeringTorque) <= hand_ok and
+            abs(CS.out.steeringRateDeg) <= rate_ok and
             abs(CS.out.steeringAngleDeg) < p.LKAS_ANGLE_MAX_MEAS)
 
   def handle_angle_lateral(self, CC, CS):
@@ -62,6 +90,7 @@ class CarController(CarControllerBase):
       self.angle_yielding = False
       self.angle_yield_frames = 0
       self.angle_yield_calm_frames = 0
+      self.angle_conflict_frames = 0
       lat_req = False
     else:
       if self._lkas_angle_hard_conflict(CS, requesting=self.lat_active_prev):
@@ -79,7 +108,10 @@ class CarController(CarControllerBase):
           self.angle_yield_calm_frames += 1
         else:
           self.angle_yield_calm_frames = 0
-        if min_hold and self.angle_yield_calm_frames >= self.p.LKAS_ANGLE_RESUME_CALM_FRAMES:
+        calm_need = (self.p.LKAS_ANGLE_RESUME_CALM_FRAMES_HWY
+                     if self._lkas_angle_highway_manual(CS)
+                     else self.p.LKAS_ANGLE_RESUME_CALM_FRAMES)
+        if min_hold and self.angle_yield_calm_frames >= calm_need:
           self.angle_yielding = False
           self.angle_yield_frames = 0
           self.angle_yield_calm_frames = 0

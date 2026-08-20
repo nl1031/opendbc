@@ -7,12 +7,14 @@ from opendbc.car.subaru.interface import CarInterface
 from opendbc.car.subaru.values import CAR
 
 
-def _cs(angle=0.0, rate=0.0, torque=0.0, v=10.0):
+def _cs(angle=0.0, rate=0.0, torque=0.0, v=10.0, left_blinker=False, right_blinker=False):
   return SimpleNamespace(out=SimpleNamespace(
     vEgoRaw=v,
     steeringAngleDeg=angle,
     steeringRateDeg=rate,
     steeringTorque=torque,
+    leftBlinker=left_blinker,
+    rightBlinker=right_blinker,
   ))
 
 
@@ -168,6 +170,65 @@ class TestSubaruCarController(unittest.TestCase):
     cc = _cc(lat_active=True, des_angle=20.0)
     self.controller.handle_angle_lateral(cc, cs)
     self.assertAlmostEqual(self.controller.apply_angle_last, 0.8, places=2)
+
+  def test_highway_light_nudge_keeps_request(self):
+    """Torque 60 is below the 80 highway bar — keep lane, do not yield."""
+    self.controller.handle_angle_lateral(_cc(True, 0.0), _cs(0.0, 0.0, 5.0, 25.0))
+    for _ in range(8):
+      self.controller.handle_angle_lateral(_cc(True, 2.0), _cs(1.0, 5.0, 60.0, 25.0))
+    self.assertFalse(self.controller.angle_yielding)
+    self.assertTrue(self.controller.lat_active_prev)
+
+  def test_highway_single_spike_does_not_yield(self):
+    """One 90-torque frame (road bump) must not drop Request."""
+    self.controller.handle_angle_lateral(_cc(True, 0.0), _cs(0.0, 0.0, 5.0, 25.0))
+    self.controller.handle_angle_lateral(_cc(True, 2.0), _cs(1.0, 5.0, 90.0, 25.0))
+    self.assertFalse(self.controller.angle_yielding)
+    self.assertTrue(self.controller.lat_active_prev)
+
+  def test_highway_manual_nudge_yields(self):
+    """Sustained torque 90 for debounce frames drops Request."""
+    self.controller.handle_angle_lateral(_cc(True, 0.0), _cs(0.0, 0.0, 5.0, 25.0))
+    self.assertTrue(self.controller.lat_active_prev)
+    n = self.controller.p.LKAS_ANGLE_HWY_YIELD_DEBOUNCE
+    for _ in range(n):
+      self.controller.handle_angle_lateral(_cc(True, 2.0), _cs(1.0, 5.0, 90.0, 25.0))
+    self.assertTrue(self.controller.angle_yielding)
+    self.assertFalse(self.controller.lat_active_prev)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 1.0)
+
+  def test_highway_blinker_keeps_high_yield(self):
+    """ALC / blinker on highway still uses the 120 hand threshold."""
+    self.controller.handle_angle_lateral(
+      _cc(True, 0.0), _cs(0.0, 0.0, 5.0, 25.0, left_blinker=True))
+    for _ in range(6):
+      self.controller.handle_angle_lateral(
+        _cc(True, 2.0), _cs(1.0, 5.0, 90.0, 25.0, left_blinker=True))
+    self.assertFalse(self.controller.angle_yielding)
+    self.assertTrue(self.controller.lat_active_prev)
+
+  def test_highway_manual_resume_is_slow(self):
+    """After a highway no-blinker yield, 0.2 s calm must not snap Request back."""
+    self.controller.handle_angle_lateral(_cc(True, 0.0), _cs(0.0, 0.0, 5.0, 25.0))
+    for _ in range(self.controller.p.LKAS_ANGLE_HWY_YIELD_DEBOUNCE):
+      self.controller.handle_angle_lateral(_cc(True, 2.0), _cs(1.0, 26.0, 90.0, 25.0))
+    self.assertTrue(self.controller.angle_yielding)
+
+    early = (self.controller.p.LKAS_ANGLE_YIELD_MIN_FRAMES +
+             self.controller.p.LKAS_ANGLE_RESUME_CALM_FRAMES + 5)
+    for _ in range(early):
+      self.controller.handle_angle_lateral(_cc(True, 0.0), _cs(1.0, 0.0, 5.0, 25.0))
+    self.assertTrue(self.controller.angle_yielding)
+    self.assertFalse(self.controller.lat_active_prev)
+
+    rest = (self.controller.p.LKAS_ANGLE_RESUME_CALM_FRAMES_HWY + 5)
+    for _ in range(rest):
+      if not self.controller.angle_yielding:
+        break
+      self.controller.handle_angle_lateral(_cc(True, 0.0), _cs(1.0, 0.0, 5.0, 25.0))
+    self.assertFalse(self.controller.angle_yielding)
+    self.assertTrue(self.controller.lat_active_prev)
+    self.assertAlmostEqual(self.controller.apply_angle_last, 1.0)
 
 
 if __name__ == "__main__":

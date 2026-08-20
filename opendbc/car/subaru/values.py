@@ -30,16 +30,26 @@ class CarControllerParams:
     )
 
     # Hard yield (route 0000002e): Request=1 + 70–170°/s hand turn + |cmd-meas|~50°
-    # latched EPS even though panda accepted every TX. Light grip ~30–55 must NOT
-    # yield (that made OP feel weak). |des-meas| is not a resume gate (deadlock).
+    # latched EPS even though panda accepted every TX. Low-speed light grip ~30–55
+    # must NOT yield (that made OP feel weak). |des-meas| is not a resume gate.
+    # Highway no-blinker: prefer a firm, sustained input over a single-frame
+    # spike (light rest / road bump must not drop Request). Resume stays slow
+    # so a real override is not snatched back after 0.2 s.
     self.LKAS_ANGLE_HAND_YIELD = 120
     self.LKAS_ANGLE_HAND_RESUME = 80
+    self.LKAS_ANGLE_HAND_YIELD_HWY = 80
+    self.LKAS_ANGLE_HAND_RESUME_HWY = 50
     self.LKAS_ANGLE_RATE_YIELD = 50.0          # deg/s
+    self.LKAS_ANGLE_RATE_YIELD_HWY = 25.0
     self.LKAS_ANGLE_RATE_RESUME = 25.0
+    self.LKAS_ANGLE_RATE_RESUME_HWY = 12.0
+    self.LKAS_ANGLE_HWY_SPEED = 15.0           # m/s
+    self.LKAS_ANGLE_HWY_YIELD_DEBOUNCE = 4     # ~80 ms @ 50 Hz
     self.LKAS_ANGLE_MAX_MEAS = 40.0            # intersection / lock-to-lock
     self.LKAS_ANGLE_CMD_MEAS_MAX = 10.0
     self.LKAS_ANGLE_YIELD_MIN_FRAMES = 10      # 0.2s
     self.LKAS_ANGLE_RESUME_CALM_FRAMES = 10    # 0.2s
+    self.LKAS_ANGLE_RESUME_CALM_FRAMES_HWY = 100  # 2.0s @ ~50 Hz
 
     if CP.flags & SubaruFlags.GLOBAL_GEN2:
       # TODO: lower rate limits, this reaches min/max in 0.5s which negatively affects tuning
